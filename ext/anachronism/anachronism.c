@@ -46,10 +46,10 @@ static void got_option(telnet_nvt* nvt, telnet_byte command, telnet_byte option)
   const char* strCommand = NULL;
   switch (command)
   {
-    case IAC_WILL: strCommand = "WILL"; break;
-    case IAC_WONT: strCommand = "WONT"; break;
-    case IAC_DO:   strCommand = "DO";   break;
-    case IAC_DONT: strCommand = "DONT"; break;
+    case IAC_WILL: strCommand = "will"; break;
+    case IAC_WONT: strCommand = "wont"; break;
+    case IAC_DO:   strCommand = "do";   break;
+    case IAC_DONT: strCommand = "dont"; break;
     default:
       assert("Got something other than WILL/WONT/DO/DONT!");
   }
@@ -127,7 +127,7 @@ void Init_anachronism()
   // The Parser class processes a stream of data into discrete Telnet events
   VALUE cParser = rb_define_class_under(mAnachronism, "Parser", rb_cObject);
   rb_define_alloc_func(cParser, parser_allocate);
-  rb_define_method(cParser, "process", parser_process, 1);
+  rb_define_private_method(cParser, "process_internal", parser_process, 1);
   
   // Event embodies a single datum from the telnet stream, such as text or a command
   cEvent = rb_struct_define("Event", "type", "data", NULL);
