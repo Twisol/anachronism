@@ -12,7 +12,7 @@
   }
   
   action text {
-    if (nvt->text_callback)
+    if (nvt->text_callback && nvt->left != fpc)
       nvt->text_callback(nvt, nvt->left, fpc - nvt->left);
   }
   
