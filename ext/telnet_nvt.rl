@@ -1,14 +1,24 @@
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 #include "telnet_nvt.h"
 
 %%{
   machine telnet_nvt;
   access nvt->;
-
+  
+  action start_text {
+    nvt->left = fpc;
+  }
+  
   action text {
     if (nvt->text_callback)
-      nvt->text_callback(nvt, fc);
+      nvt->text_callback(nvt, nvt->left, fpc - nvt->left);
+  }
+  
+  action char {
+    if (nvt->text_callback)
+      nvt->text_callback(nvt, fpc, 1);
   }
   
   action basic_command {
@@ -62,12 +72,14 @@ int telnet_nvt_recv(telnet_nvt* nvt, const telnet_byte* data, size_t length)
   if (!nvt)
     return -1;
   
+  nvt->left = data;
+  
   const telnet_byte* p = data;
   const telnet_byte* pe = data + length;
-  const telnet_byte* eof = NULL;
+  const telnet_byte* eof = pe;
   
   %% write exec;
-
+  
   return p-data;
 }
 

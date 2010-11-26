@@ -37,7 +37,7 @@ typedef enum telnet_command
 struct telnet_nvt;
 typedef struct telnet_nvt telnet_nvt;
 
-typedef void (*telnet_text_callback)(telnet_nvt* nvt, telnet_byte data);
+typedef void (*telnet_text_callback)(telnet_nvt* nvt, const telnet_byte* data, size_t length);
 typedef void (*telnet_eol_callback)(telnet_nvt* nvt);
 typedef void (*telnet_command_callback)(telnet_nvt* nvt, telnet_byte command);
 typedef void (*telnet_option_callback)(telnet_nvt* nvt, telnet_byte command, telnet_byte option);
@@ -52,6 +52,8 @@ struct telnet_nvt
   int cs; /* current Ragel state */
   telnet_byte option_mark; /* temporary storage for a command byte */
   int options[256]; /* track the state of each subnegotiation option */
+  
+  const telnet_byte* left; /* left index of the current text block */
 
   telnet_text_callback    text_callback;
   telnet_command_callback command_callback;

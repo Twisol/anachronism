@@ -42,21 +42,21 @@
   ###
   # Plain text
   ###
-  plain_text = (^special_byte)+ %text;
+  plain_text = (^special_byte)+ >start_text %text;
 
   ###
   # CR sequence
   ###
-  cr_sequence = CR @text
+  cr_sequence = CR @char
                 ( NUL
-                | NL @text
+                | NL @char
                 | ^(NUL|NL) @{fhold;} @warning_cr
                 );
   
   ###
   # IAC sequence
   ###
-  escaped_iac = IAC @text;
+  escaped_iac = IAC @char;
   
   basic_command = basic_command_type @basic_command;
 
@@ -83,13 +83,9 @@
   ###
   # Telnet stream
   ###
+
   # These are the three basic data formats that will be accepted
   # by the telnet parser.
-  #telnet_stream = (plain_text
-  #                |cr_sequence+
-  #                |iac_sequence+
-  #                )**;
-
   telnet_stream = ( plain_text
                   | cr_sequence
                   | iac_sequence
