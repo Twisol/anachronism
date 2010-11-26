@@ -1,0 +1,1 @@
+Anachronism aims to implement a fully-compliant Telnet NVT ("Network Virtual Terminal") for use in Ruby code. A strict Ragel parser is used to process incoming data, transforming a stream of bytes into a stream of events.
