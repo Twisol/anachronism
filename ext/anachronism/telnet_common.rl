@@ -68,7 +68,7 @@
                    ( cr_sequence
                    | plain_text
                    | IAC ^(IAC|SE) @warning_iac
-                   )*
+                   )**
                    IAC SE @subneg_command_end;
 
   unknown_command = unknown_command_type @warning_iac @basic_command;
