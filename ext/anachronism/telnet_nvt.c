@@ -229,27 +229,16 @@ tr8:
     nvt->left = p;
   }
 	goto st5;
-tr11:
-#line 14 "ext/anachronism/telnet_nvt.rl"
-	{
-    if (nvt->text_callback && nvt->left != p)
-      nvt->text_callback(nvt, nvt->left, p - nvt->left);
-  }
-#line 10 "ext/anachronism/telnet_nvt.rl"
-	{
-    nvt->left = p;
-  }
-	goto st5;
 st5:
 	if ( ++p == pe )
 		goto _test_eof5;
 case 5:
-#line 248 "ext/anachronism/telnet_nvt.c"
+#line 237 "ext/anachronism/telnet_nvt.c"
 	switch( (*p) ) {
 		case 13u: goto tr12;
 		case 255u: goto tr13;
 	}
-	goto tr11;
+	goto st5;
 tr9:
 #line 19 "ext/anachronism/telnet_nvt.rl"
 	{
@@ -273,7 +262,7 @@ st6:
 	if ( ++p == pe )
 		goto _test_eof6;
 case 6:
-#line 277 "ext/anachronism/telnet_nvt.c"
+#line 266 "ext/anachronism/telnet_nvt.c"
 	switch( (*p) ) {
 		case 0u: goto st4;
 		case 10u: goto tr16;
@@ -290,7 +279,7 @@ st7:
 	if ( ++p == pe )
 		goto _test_eof7;
 case 7:
-#line 294 "ext/anachronism/telnet_nvt.c"
+#line 283 "ext/anachronism/telnet_nvt.c"
 	switch( (*p) ) {
 		case 240u: goto tr18;
 		case 255u: goto st0;
@@ -309,7 +298,7 @@ st8:
 	if ( ++p == pe )
 		goto _test_eof8;
 case 8:
-#line 313 "ext/anachronism/telnet_nvt.c"
+#line 302 "ext/anachronism/telnet_nvt.c"
 	goto tr20;
 	}
 	_test_eof9:  nvt->cs = 9; goto _test_eof; 
@@ -334,7 +323,7 @@ case 8:
       nvt->text_callback(nvt, nvt->left, p - nvt->left);
   }
 	break;
-#line 338 "ext/anachronism/telnet_nvt.c"
+#line 327 "ext/anachronism/telnet_nvt.c"
 	}
 	}
 

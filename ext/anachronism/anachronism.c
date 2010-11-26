@@ -16,29 +16,22 @@ typedef struct rb_telnet_nvt
 
 static VALUE cEvent = Qnil;
 
-static VALUE new_event(const char* type, VALUE data)
+static void emit_event(const char* type, VALUE data)
 {
-  return rb_struct_new(cEvent, STR2SYM(type), data);
+  rb_yield_values(2, STR2SYM(type), data);
 }
 
 static void got_text(telnet_nvt* nvt, const telnet_byte* text, size_t length)
 {
   const char* type = (RB_NVT(nvt)->subneg) ? "subnegotiation" : "text";
   VALUE data = rb_str_new(text, length);
-  
-  // Concatenate it with the previous event if it was a text event.
-  size_t ary_len = RARRAY_LEN(RB_NVT(nvt)->events);
-  VALUE event = rb_ary_entry(RB_NVT(nvt)->events, ary_len-1);
-  if (event != Qnil && rb_struct_aref(event, STR2SYM("type")) == STR2SYM("text"))
-    rb_str_cat(rb_struct_aref(event, STR2SYM("data")), text, length);
-  else
-    rb_ary_push(RB_NVT(nvt)->events, new_event(type, data));
+  emit_event(type, data);
 }
 
 static void got_command(telnet_nvt* nvt, telnet_byte command)
 {
   VALUE data = INT2FIX(command);
-  rb_ary_push(RB_NVT(nvt)->events, new_event("command", data));
+  emit_event("command", data);
 }
 
 static void got_option(telnet_nvt* nvt, telnet_byte command, telnet_byte option)
@@ -55,7 +48,7 @@ static void got_option(telnet_nvt* nvt, telnet_byte command, telnet_byte option)
   }
   
   VALUE data = rb_ary_new3(2, INT2FIX(option), STR2SYM(strCommand));
-  rb_ary_push(RB_NVT(nvt)->events, new_event("option", data));
+  emit_event("option", data);
 }
 
 static void got_mode(telnet_nvt* nvt, telnet_mode mode, telnet_byte extra)
@@ -67,7 +60,7 @@ static void got_error(telnet_nvt* nvt, int fatal, const char* message, size_t po
 {
   VALUE type = STR2SYM(fatal ? "fatal" : "warning");
   VALUE data = rb_ary_new3(2, type, rb_str_new_cstr(message));
-  rb_ary_push(RB_NVT(nvt)->events, new_event("error", data));
+  emit_event("error", data);
 }
 
 
@@ -94,7 +87,6 @@ static VALUE parser_allocate(VALUE klass)
   
   nvt->subneg = 0;
   nvt->object = object;
-  nvt->events = Qnil;
   
   return object;
 }
@@ -103,10 +95,6 @@ static VALUE parser_process(VALUE self, VALUE data)
 {
   rb_telnet_nvt* nvt = NULL;
   Data_Get_Struct(self, rb_telnet_nvt, nvt);
-  
-  // Create and store an array to collect the events in
-  VALUE events = rb_ary_new();
-  nvt->events = events;
 
   // Prepare the data as a string
   VALUE rb_str = StringValue(data);
@@ -115,9 +103,8 @@ static VALUE parser_process(VALUE self, VALUE data)
   
   // Pass the string to the parser.
   telnet_nvt_recv(NVT(nvt), str, len);
-
-  nvt->events = Qnil;
-  return events;
+  
+  return Qnil;
 }
 
 void Init_anachronism()
@@ -127,7 +114,7 @@ void Init_anachronism()
   // The Parser class processes a stream of data into discrete Telnet events
   VALUE cParser = rb_define_class_under(mAnachronism, "Parser", rb_cObject);
   rb_define_alloc_func(cParser, parser_allocate);
-  rb_define_private_method(cParser, "process_internal", parser_process, 1);
+  rb_define_method(cParser, "process", parser_process, 1);
   
   // Event embodies a single datum from the telnet stream, such as text or a command
   cEvent = rb_struct_define("Event", "type", "data", NULL);

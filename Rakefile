@@ -1,3 +1,8 @@
+require 'rspec/core/rake_task'
+
+RSpec::Core::RakeTask.new(:spec)
+task :default => :spec
+
 namespace :ragel do
   desc 'View a Ragel state machine visualization'
   task :graph, :file do |t, args|
