@@ -10,11 +10,8 @@ typedef struct rb_telnet_nvt
 {
   telnet_nvt base;
   unsigned char subneg; // boolean
-  VALUE object;
-  VALUE events;
 } rb_telnet_nvt;
 
-static VALUE cEvent = Qnil;
 
 static void emit_event(const char* type, VALUE data)
 {
@@ -86,7 +83,6 @@ static VALUE parser_allocate(VALUE klass)
   NVT(nvt)->error_callback   = &got_error;
   
   nvt->subneg = 0;
-  nvt->object = object;
   
   return object;
 }
@@ -112,11 +108,7 @@ void Init_anachronism()
   VALUE mAnachronism = rb_define_module("Anachronism");
   
   // The Parser class processes a stream of data into discrete Telnet events
-  VALUE cParser = rb_define_class_under(mAnachronism, "Parser", rb_cObject);
-  rb_define_alloc_func(cParser, parser_allocate);
-  rb_define_method(cParser, "process", parser_process, 1);
-  
-  // Event embodies a single datum from the telnet stream, such as text or a command
-  cEvent = rb_struct_define("Event", "type", "data", NULL);
-  rb_define_const(mAnachronism, "Event", cEvent);
+  VALUE cNVT = rb_define_class_under(mAnachronism, "NVT", rb_cObject);
+  rb_define_alloc_func(cNVT, parser_allocate);
+  rb_define_method(cNVT, "process", parser_process, 1);
 }

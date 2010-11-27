@@ -51,7 +51,7 @@ struct telnet_nvt
 {
   int cs; /* current Ragel state */
   telnet_byte option_mark; /* temporary storage for a command byte */
-  int options[256]; /* track the state of each subnegotiation option */
+  unsigned char options[256]; /* track the state of each subnegotiation option */
   
   const telnet_byte* left; /* left index of the current text block */
 

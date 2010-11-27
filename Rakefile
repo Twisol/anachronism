@@ -1,6 +1,8 @@
 require 'rspec/core/rake_task'
 
-RSpec::Core::RakeTask.new(:spec)
+RSpec::Core::RakeTask.new(:spec) do |t|
+  t.rspec_opts = ["--colour"]
+end
 task :default => :spec
 
 namespace :ragel do
