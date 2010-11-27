@@ -67,7 +67,7 @@ int telnet_nvt_init(telnet_nvt* nvt)
   return 1;
 }
 
-int telnet_nvt_recv(telnet_nvt* nvt, const telnet_byte* data, size_t length)
+int telnet_nvt_parse(telnet_nvt* nvt, const telnet_byte* data, size_t length)
 {
   if (!nvt)
     return -1;

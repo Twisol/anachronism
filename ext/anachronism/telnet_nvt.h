@@ -67,7 +67,7 @@ struct telnet_nvt
 
 
 int telnet_nvt_init(telnet_nvt* nvt);
-int telnet_nvt_recv(telnet_nvt* nvt, const telnet_byte* data, size_t length);
+int telnet_nvt_parse(telnet_nvt* nvt, const telnet_byte* data, size_t length);
 
 int telnet_nvt_text(telnet_nvt* nvt, const telnet_byte* data, size_t length);
 int telnet_nvt_command(telnet_nvt* nvt, const telnet_command command);

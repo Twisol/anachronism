@@ -98,7 +98,7 @@ static VALUE parser_process(VALUE self, VALUE data)
   size_t len = RSTRING_LEN(rb_str);
   
   // Pass the string to the parser.
-  telnet_nvt_recv(NVT(nvt), str, len);
+  telnet_nvt_parse(NVT(nvt), str, len);
   
   return Qnil;
 }
