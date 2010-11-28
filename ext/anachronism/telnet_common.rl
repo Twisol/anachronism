@@ -65,7 +65,10 @@
                | cr_seq
                | IAC IAC @char
                )**
-               IAC (SE|^(IAC|SE) @fhold @flush_text @warning_iac) >flush_text;
+               IAC
+               ( SE
+               | ^(IAC|SE) @fhold @warning_iac
+               ) >flush_text @subneg_command_end;
   
   iac_unknown = iac_unknown_type @warning_iac @basic_command;
   

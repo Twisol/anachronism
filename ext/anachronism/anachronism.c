@@ -24,9 +24,7 @@ static void emit_event(const char* type, VALUE data)
 
 static void got_text(telnet_nvt* nvt, const telnet_byte* text, size_t length)
 {
-  const char* type = (RB_NVT(nvt)->subneg) ? "subnegotiation" : "text";
-  VALUE data = rb_str_new(text, length);
-  emit_event(type, data);
+  emit_event("text", rb_str_new(text, length));
 }
 
 static void got_command(telnet_nvt* nvt, telnet_byte command)
@@ -55,6 +53,14 @@ static void got_option(telnet_nvt* nvt, telnet_byte command, telnet_byte option)
 static void got_mode(telnet_nvt* nvt, telnet_mode mode, telnet_byte extra)
 {
   RB_NVT(nvt)->subneg = (mode == TELNET_SUBNEG);
+  
+  VALUE data = Qnil;
+  if (RB_NVT(nvt)->subneg)
+    data = rb_ary_new3(2, STR2SYM("begin"), INT2FIX(extra));
+  else
+    data = rb_ary_new3(1, STR2SYM("end"));
+  
+  emit_event("subnegotiation", data);
 }
 
 static void got_error(telnet_nvt* nvt, int fatal, const char* message, size_t position)

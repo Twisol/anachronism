@@ -121,16 +121,6 @@ tr4:
       nvt->command_callback(nvt, (*p));
   }
 	goto st7;
-tr14:
-#line 10 "ext/anachronism/telnet_nvt.rl"
-	{
-    if (nvt->text_callback && nvt->buflen > 0)
-    {
-      nvt->text_callback(nvt, nvt->buf, nvt->buflen);
-      nvt->buflen = 0;
-    }
-  }
-	goto st7;
 tr13:
 #line 10 "ext/anachronism/telnet_nvt.rl"
 	{
@@ -147,6 +137,26 @@ tr13:
     if (nvt->error_callback)
       nvt->error_callback(nvt, TELNET_WARNING, "IAC followed by invalid command.", p-data);
   }
+#line 40 "ext/anachronism/telnet_nvt.rl"
+	{
+    if (nvt->mode_callback)
+      nvt->mode_callback(nvt, TELNET_TEXT, 0);
+  }
+	goto st7;
+tr14:
+#line 10 "ext/anachronism/telnet_nvt.rl"
+	{
+    if (nvt->text_callback && nvt->buflen > 0)
+    {
+      nvt->text_callback(nvt, nvt->buf, nvt->buflen);
+      nvt->buflen = 0;
+    }
+  }
+#line 40 "ext/anachronism/telnet_nvt.rl"
+	{
+    if (nvt->mode_callback)
+      nvt->mode_callback(nvt, TELNET_TEXT, 0);
+  }
 	goto st7;
 tr15:
 #line 31 "ext/anachronism/telnet_nvt.rl"
@@ -159,7 +169,7 @@ st7:
 	if ( ++p == pe )
 		goto _test_eof7;
 case 7:
-#line 163 "ext/anachronism/telnet_nvt.c"
+#line 173 "ext/anachronism/telnet_nvt.c"
 	switch( (*p) ) {
 		case 13u: goto tr16;
 		case 255u: goto st1;
@@ -176,7 +186,7 @@ st0:
 	if ( ++p == pe )
 		goto _test_eof0;
 case 0:
-#line 180 "ext/anachronism/telnet_nvt.c"
+#line 190 "ext/anachronism/telnet_nvt.c"
 	switch( (*p) ) {
 		case 0u: goto st7;
 		case 10u: goto tr2;
@@ -210,7 +220,7 @@ st2:
 	if ( ++p == pe )
 		goto _test_eof2;
 case 2:
-#line 214 "ext/anachronism/telnet_nvt.c"
+#line 224 "ext/anachronism/telnet_nvt.c"
 	goto tr7;
 tr12:
 #line 6 "ext/anachronism/telnet_nvt.rl"
@@ -247,7 +257,7 @@ st3:
 	if ( ++p == pe )
 		goto _test_eof3;
 case 3:
-#line 251 "ext/anachronism/telnet_nvt.c"
+#line 261 "ext/anachronism/telnet_nvt.c"
 	switch( (*p) ) {
 		case 13u: goto tr9;
 		case 255u: goto st5;
@@ -264,7 +274,7 @@ st4:
 	if ( ++p == pe )
 		goto _test_eof4;
 case 4:
-#line 268 "ext/anachronism/telnet_nvt.c"
+#line 278 "ext/anachronism/telnet_nvt.c"
 	switch( (*p) ) {
 		case 0u: goto st3;
 		case 10u: goto tr8;
@@ -297,7 +307,7 @@ st6:
 	if ( ++p == pe )
 		goto _test_eof6;
 case 6:
-#line 301 "ext/anachronism/telnet_nvt.c"
+#line 311 "ext/anachronism/telnet_nvt.c"
 	goto tr15;
 	}
 	_test_eof7:  nvt->cs = 7; goto _test_eof; 
@@ -323,7 +333,7 @@ case 6:
     }
   }
 	break;
-#line 327 "ext/anachronism/telnet_nvt.c"
+#line 337 "ext/anachronism/telnet_nvt.c"
 	}
 	}
 
