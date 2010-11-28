@@ -53,7 +53,8 @@ struct telnet_nvt
   telnet_byte option_mark; /* temporary storage for a command byte */
   unsigned char options[256]; /* track the state of each subnegotiation option */
   
-  const telnet_byte* left; /* left index of the current text block */
+  telnet_byte* buf; /* Buffer to build up a stretch of text in. */
+  size_t buflen; /* Length so far of the buffer. */
 
   telnet_text_callback    text_callback;
   telnet_command_callback command_callback;

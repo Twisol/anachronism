@@ -7,18 +7,17 @@
   machine telnet_nvt;
   access nvt->;
   
-  action start_text {
-    nvt->left = fpc;
-  }
-  
-  action text {
-    if (nvt->text_callback && nvt->left != fpc)
-      nvt->text_callback(nvt, nvt->left, fpc - nvt->left);
+  action flush_text {
+    if (nvt->text_callback && nvt->buflen > 0)
+    {
+      nvt->text_callback(nvt, nvt->buf, nvt->buflen);
+      nvt->buflen = 0;
+    }
   }
   
   action char {
     if (nvt->text_callback)
-      nvt->text_callback(nvt, fpc, 1);
+      nvt->buf[nvt->buflen++] = fc;
   }
   
   action basic_command {
@@ -72,13 +71,24 @@ int telnet_nvt_parse(telnet_nvt* nvt, const telnet_byte* data, size_t length)
   if (!nvt)
     return -1;
   
-  nvt->left = data;
+  // Only bother saving text if it'll be used
+  if (nvt->text_callback)
+  {
+    // Because of how the parser translates data, a run of text is guaranteed to
+    // be at most 'length' characters long. In practice it's usually less due to
+    // escaped characters (IAC IAC -> IAC), and text separated by commands.
+    nvt->buf = malloc(length * sizeof(*nvt->buf));
+    nvt->buflen = 0;
+  }
   
   const telnet_byte* p = data;
   const telnet_byte* pe = data + length;
   const telnet_byte* eof = pe;
   
   %% write exec;
+  
+  free(nvt->buf);
+  nvt->buf = NULL;
   
   return p-data;
 }

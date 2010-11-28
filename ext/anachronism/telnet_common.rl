@@ -2,6 +2,9 @@
   machine telnet_nvt_common;
   alphtype unsigned char;
   
+  # Shorthand for tidiness.
+  action fhold {fhold;}
+  
   # Special bytes that must be handled differently from normal text:
   CR = "\r"; # Only \0 or \n may follow
   IAC = 255; # Telnet command marker
@@ -11,7 +14,7 @@
   NL = "\n";
   NUL = "\0";
   
-  # The only command bytes that may follow an IAC:
+  # The only bytes that may follow an IAC:
   SE   = 240;
   NOP  = 241;
   DM   = 242;
@@ -27,69 +30,61 @@
   WONT = 252;
   DO   = 253;
   DONT = 254;
-  # IAC IAC is interpreted as a plain_text IAC byte.
+  # IAC IAC is interpreted as a plain-text IAC byte.
   
   # Sorting the above IAC commands by type:
-  basic_command_type   = NOP | DM | BRK | IP | AO | AYT | EC | EL | GA;
-  arg_command_type     = WILL | WONT | DO | DONT;
-  subneg_command_type  = SB;
-  unknown_command_type = ^( basic_command_type
-                          | arg_command_type
-                          | subneg_command_type
-                          | IAC
-                          );
-
+  iac_command_type = NOP | DM | BRK | IP | AO | AYT | EC | EL | GA;
+  iac_option_type  = WILL | WONT | DO | DONT;
+  iac_subneg_type  = SB;
+  iac_unknown_type = ^( iac_command_type
+                      | iac_option_type
+                      | iac_subneg_type
+                      | IAC
+                      );
+  
   ###
   # Plain text
   ###
-  plain_text = (^special_byte)+ >start_text %text;
-
-  ###
-  # CR sequence
-  ###
-  cr_sequence = CR @char
-                ( NUL
-                | NL @char
-                | ^(NUL|NL) @{fhold;} @warning_cr
-                );
+  plain_text = (^special_byte) @char;
+  cr_seq = CR @char
+             ( NUL
+             | NL @char
+             | ^(NUL|NL) @fhold @flush_text @warning_cr
+             );
   
   ###
   # IAC sequence
   ###
-  escaped_iac = IAC @char;
+  iac_command = iac_command_type @basic_command;
   
-  basic_command = basic_command_type @basic_command;
-
-  arg_command = arg_command_type @option_mark
-                any @option_command;
-
-  subneg_command = subneg_command_type
-                   any @subneg_command
-                   ( cr_sequence
-                   | plain_text
-                   | IAC ^(IAC|SE) @warning_iac
-                   )**
-                   IAC SE @subneg_command_end;
-
-  unknown_command = unknown_command_type @warning_iac @basic_command;
-
-  iac_sequence = IAC ( escaped_iac
-                     | basic_command
-                     | arg_command
-                     | subneg_command
-                     | unknown_command
-                     );
-
+  iac_option = iac_option_type @option_mark
+               any @option_command;
+  
+  iac_subneg = iac_subneg_type any @subneg_command
+               ( plain_text
+               | cr_seq
+               | IAC IAC @char
+               )**
+               IAC (SE|^(IAC|SE) @fhold @flush_text @warning_iac) >flush_text;
+  
+  iac_unknown = iac_unknown_type @warning_iac @basic_command;
+  
+  iac_seq = ( iac_command
+            | iac_option
+            | iac_subneg
+            | iac_unknown
+            );
+  
   ###
   # Telnet stream
   ###
-
-  # These are the three basic data formats that will be accepted
-  # by the telnet parser.
   telnet_stream = ( plain_text
-                  | cr_sequence
-                  | iac_sequence
-                  )**;
-
+                  | cr_seq
+                  | IAC
+                    ( IAC @char
+                    | iac_seq >flush_text
+                    )
+                  )** %flush_text;
+  
   main := telnet_stream;
 }%%
