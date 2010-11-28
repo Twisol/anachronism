@@ -14,6 +14,8 @@ typedef struct rb_telnet_nvt
   VALUE object;
 } rb_telnet_nvt;
 
+static mAnachronism = Qnil;
+
 
 static void emit_event(const char* type, VALUE data)
 {
@@ -129,13 +131,28 @@ static VALUE parser_send_text(VALUE self, VALUE data)
   return Qnil;
 }
 
+static VALUE parser_send_command(VALUE self, VALUE command)
+{
+  rb_telnet_nvt* nvt = NULL;
+  Data_Get_Struct(self, rb_telnet_nvt, nvt);
+  
+  if (TYPE(command) == T_SYMBOL)
+  {
+    VALUE command_list = rb_const_get(mAnachronism, rb_intern("COMMANDS"));
+    command = rb_hash_aref(command_list, command);
+  }
+  
+  telnet_nvt_command(NVT(nvt), NUM2INT(command));
+}
+
 void Init_anachronism()
 {
-  VALUE mAnachronism = rb_define_module("Anachronism");
+  mAnachronism = rb_define_module("Anachronism");
   
   // The Parser class processes a stream of data into discrete Telnet events
   VALUE cNVT = rb_define_class_under(mAnachronism, "NVT", rb_cObject);
   rb_define_alloc_func(cNVT, parser_allocate);
   rb_define_method(cNVT, "process", parser_process, 1);
   rb_define_method(cNVT, "send_text", parser_send_text, 1);
+  rb_define_method(cNVT, "send_command", parser_send_command, 1);
 }

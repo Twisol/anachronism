@@ -400,8 +400,16 @@ int telnet_nvt_text(telnet_nvt* nvt, const telnet_byte* data, const size_t lengt
 
 int telnet_nvt_command(telnet_nvt* nvt, const telnet_command command)
 {
-  if (!(nvt && nvt->send_callback))
+  static telnet_byte buf[] = {'\xFF', 0};
+  
+  if (!nvt)
     return 0;
+  else if (!nvt->send_callback)
+    return 1; // immediate success since they apparently don't want the data to go anywhere
+  
+  buf[1] = command;
+  nvt->send_callback(nvt, (const telnet_byte*)buf, 2);
+  
   return 1;
 }
 
