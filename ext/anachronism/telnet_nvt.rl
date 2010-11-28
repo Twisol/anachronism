@@ -66,7 +66,7 @@ int telnet_nvt_init(telnet_nvt* nvt)
   return 1;
 }
 
-int telnet_nvt_parse(telnet_nvt* nvt, const telnet_byte* data, size_t length)
+int telnet_nvt_parse(telnet_nvt* nvt, const telnet_byte* data, const size_t length)
 {
   if (!nvt)
     return -1;
@@ -75,9 +75,11 @@ int telnet_nvt_parse(telnet_nvt* nvt, const telnet_byte* data, size_t length)
   if (nvt->text_callback)
   {
     // Because of how the parser translates data, a run of text is guaranteed to
-    // be at most 'length' characters long. In practice it's usually less due to
-    // escaped characters (IAC IAC -> IAC), and text separated by commands.
+    // be at most 'length' characters long. In practice it's usually less, due to
+    // escaped characters (IAC IAC -> IAC) and text separated by commands.
     nvt->buf = malloc(length * sizeof(*nvt->buf));
+    if (!nvt->buf)
+      return -1; // unable to allocate a buffer
     nvt->buflen = 0;
   }
   
@@ -93,10 +95,64 @@ int telnet_nvt_parse(telnet_nvt* nvt, const telnet_byte* data, size_t length)
   return p-data;
 }
 
-int telnet_nvt_text(telnet_nvt* nvt, const telnet_byte* data, size_t length)
+int telnet_nvt_text(telnet_nvt* nvt, const telnet_byte* data, const size_t length)
 {
-  if (!(nvt && nvt->send_callback))
+  if (!nvt)
     return 0;
+  else if (!nvt->send_callback)
+    return 1; // immediate success since they apparently don't want the data to go anywhere
+  
+  // Due to the nature of the protocol, the most any one byte can be encoded as is two bytes.
+  // Hence, the smallest buffer guaranteed to contain any input is double the length of the source.
+  telnet_byte* buf = malloc(length * 2 * sizeof(*buf));
+  if (!buf)
+    return 0; // unable to allocate a buffer
+  size_t buflen = 0;
+  
+  size_t left = 0;
+  size_t right = 0;
+  for (; right < length; ++right)
+  {
+    switch (data[right])
+    {
+      case '\r':
+        memcpy(buf+buflen, data+left, right-left);
+        buflen += right - left;
+        left = right + 1;
+        
+        memcpy(buf+buflen, "\r\0", 2);
+        buflen += 2;
+        break;
+      case '\n':
+        memcpy(buf+buflen, data+left, right-left);
+        buflen += right - left;
+        left = right + 1;
+        
+        memcpy(buf+buflen, "\r\n", 2);
+        buflen += 2;
+        break;
+      case 255u: // IAC byte
+        memcpy(buf+buflen, data+left, right-left);
+        buflen += right - left;
+        left = right + 1;
+        
+        memcpy(buf+buflen, "\xFF\xFF", 2);
+        buflen += 2;
+        break;
+    }
+  }
+  
+  if (left < right)
+  {
+    memcpy(buf+buflen, data+left, right-left);
+    buflen += right - left;
+  }
+  
+  nvt->send_callback(nvt, buf, buflen);
+  
+  free(buf);
+  buf = NULL;
+  
   return 1;
 }
 
@@ -114,7 +170,7 @@ int telnet_nvt_option(telnet_nvt* nvt, const telnet_command command, const telne
   return 1;
 }
 
-int telnet_nvt_subnegotiation(telnet_nvt* nvt, const telnet_byte option, const telnet_byte* data, size_t length)
+int telnet_nvt_subnegotiation(telnet_nvt* nvt, const telnet_byte option, const telnet_byte* data, const size_t length)
 {
   if (!(nvt && nvt->send_callback))
     return 0;

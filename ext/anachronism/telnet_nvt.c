@@ -34,7 +34,7 @@ int telnet_nvt_init(telnet_nvt* nvt)
   return 1;
 }
 
-int telnet_nvt_parse(telnet_nvt* nvt, const telnet_byte* data, size_t length)
+int telnet_nvt_parse(telnet_nvt* nvt, const telnet_byte* data, const size_t length)
 {
   if (!nvt)
     return -1;
@@ -43,9 +43,11 @@ int telnet_nvt_parse(telnet_nvt* nvt, const telnet_byte* data, size_t length)
   if (nvt->text_callback)
   {
     // Because of how the parser translates data, a run of text is guaranteed to
-    // be at most 'length' characters long. In practice it's usually less due to
-    // escaped characters (IAC IAC -> IAC), and text separated by commands.
+    // be at most 'length' characters long. In practice it's usually less, due to
+    // escaped characters (IAC IAC -> IAC) and text separated by commands.
     nvt->buf = malloc(length * sizeof(*nvt->buf));
+    if (!nvt->buf)
+      return -1; // unable to allocate a buffer
     nvt->buflen = 0;
   }
   
@@ -54,7 +56,7 @@ int telnet_nvt_parse(telnet_nvt* nvt, const telnet_byte* data, size_t length)
   const telnet_byte* eof = pe;
   
   
-#line 58 "ext/anachronism/telnet_nvt.c"
+#line 60 "ext/anachronism/telnet_nvt.c"
 	{
 	if ( p == pe )
 		goto _test_eof;
@@ -157,7 +159,7 @@ st7:
 	if ( ++p == pe )
 		goto _test_eof7;
 case 7:
-#line 161 "ext/anachronism/telnet_nvt.c"
+#line 163 "ext/anachronism/telnet_nvt.c"
 	switch( (*p) ) {
 		case 13u: goto tr16;
 		case 255u: goto st1;
@@ -174,7 +176,7 @@ st0:
 	if ( ++p == pe )
 		goto _test_eof0;
 case 0:
-#line 178 "ext/anachronism/telnet_nvt.c"
+#line 180 "ext/anachronism/telnet_nvt.c"
 	switch( (*p) ) {
 		case 0u: goto st7;
 		case 10u: goto tr2;
@@ -208,7 +210,7 @@ st2:
 	if ( ++p == pe )
 		goto _test_eof2;
 case 2:
-#line 212 "ext/anachronism/telnet_nvt.c"
+#line 214 "ext/anachronism/telnet_nvt.c"
 	goto tr7;
 tr12:
 #line 6 "ext/anachronism/telnet_nvt.rl"
@@ -245,7 +247,7 @@ st3:
 	if ( ++p == pe )
 		goto _test_eof3;
 case 3:
-#line 249 "ext/anachronism/telnet_nvt.c"
+#line 251 "ext/anachronism/telnet_nvt.c"
 	switch( (*p) ) {
 		case 13u: goto tr9;
 		case 255u: goto st5;
@@ -262,7 +264,7 @@ st4:
 	if ( ++p == pe )
 		goto _test_eof4;
 case 4:
-#line 266 "ext/anachronism/telnet_nvt.c"
+#line 268 "ext/anachronism/telnet_nvt.c"
 	switch( (*p) ) {
 		case 0u: goto st3;
 		case 10u: goto tr8;
@@ -295,7 +297,7 @@ st6:
 	if ( ++p == pe )
 		goto _test_eof6;
 case 6:
-#line 299 "ext/anachronism/telnet_nvt.c"
+#line 301 "ext/anachronism/telnet_nvt.c"
 	goto tr15;
 	}
 	_test_eof7:  nvt->cs = 7; goto _test_eof; 
@@ -321,13 +323,13 @@ case 6:
     }
   }
 	break;
-#line 325 "ext/anachronism/telnet_nvt.c"
+#line 327 "ext/anachronism/telnet_nvt.c"
 	}
 	}
 
 	}
 
-#line 89 "ext/anachronism/telnet_nvt.rl"
+#line 91 "ext/anachronism/telnet_nvt.rl"
   
   free(nvt->buf);
   nvt->buf = NULL;
@@ -335,10 +337,64 @@ case 6:
   return p-data;
 }
 
-int telnet_nvt_text(telnet_nvt* nvt, const telnet_byte* data, size_t length)
+int telnet_nvt_text(telnet_nvt* nvt, const telnet_byte* data, const size_t length)
 {
-  if (!(nvt && nvt->send_callback))
+  if (!nvt)
     return 0;
+  else if (!nvt->send_callback)
+    return 1; // immediate success since they apparently don't want the data to go anywhere
+  
+  // Due to the nature of the protocol, the most any one byte can be encoded as is two bytes.
+  // Hence, the smallest buffer guaranteed to contain any input is double the length of the source.
+  telnet_byte* buf = malloc(length * 2 * sizeof(*buf));
+  if (!buf)
+    return 0; // unable to allocate a buffer
+  size_t buflen = 0;
+  
+  size_t left = 0;
+  size_t right = 0;
+  for (; right < length; ++right)
+  {
+    switch (data[right])
+    {
+      case '\r':
+        memcpy(buf+buflen, data+left, right-left);
+        buflen += right - left;
+        left = right + 1;
+        
+        memcpy(buf+buflen, "\r\0", 2);
+        buflen += 2;
+        break;
+      case '\n':
+        memcpy(buf+buflen, data+left, right-left);
+        buflen += right - left;
+        left = right + 1;
+        
+        memcpy(buf+buflen, "\r\n", 2);
+        buflen += 2;
+        break;
+      case 255u: // IAC byte
+        memcpy(buf+buflen, data+left, right-left);
+        buflen += right - left;
+        left = right + 1;
+        
+        memcpy(buf+buflen, "\xFF\xFF", 2);
+        buflen += 2;
+        break;
+    }
+  }
+  
+  if (left < right)
+  {
+    memcpy(buf+buflen, data+left, right-left);
+    buflen += right - left;
+  }
+  
+  nvt->send_callback(nvt, buf, buflen);
+  
+  free(buf);
+  buf = NULL;
+  
   return 1;
 }
 
@@ -356,7 +412,7 @@ int telnet_nvt_option(telnet_nvt* nvt, const telnet_command command, const telne
   return 1;
 }
 
-int telnet_nvt_subnegotiation(telnet_nvt* nvt, const telnet_byte option, const telnet_byte* data, size_t length)
+int telnet_nvt_subnegotiation(telnet_nvt* nvt, const telnet_byte option, const telnet_byte* data, const size_t length)
 {
   if (!(nvt && nvt->send_callback))
     return 0;
