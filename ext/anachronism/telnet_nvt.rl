@@ -5,7 +5,11 @@
 
 %%{
   machine telnet_nvt;
+  
   access nvt->;
+  variable p nvt->p;
+  variable pe nvt->pe;
+  variable eof nvt->eof;
   
   action flush_text {
     if (nvt->text_callback && nvt->buflen > 0)
@@ -83,16 +87,19 @@ int telnet_nvt_parse(telnet_nvt* nvt, const telnet_byte* data, const size_t leng
     nvt->buflen = 0;
   }
   
-  const telnet_byte* p = data;
-  const telnet_byte* pe = data + length;
-  const telnet_byte* eof = pe;
+  nvt->p = data;
+  nvt->pe = data + length;
+  nvt->eof = nvt->pe;
   
   %% write exec;
   
+  size_t bytes_used = nvt->p - data;
+  
   free(nvt->buf);
   nvt->buf = NULL;
+  nvt->p = nvt->pe = nvt->eof = NULL;
   
-  return p-data;
+  return bytes_used;
 }
 
 int telnet_nvt_text(telnet_nvt* nvt, const telnet_byte* data, const size_t length)
@@ -182,5 +189,20 @@ int telnet_nvt_subnegotiation(telnet_nvt* nvt, const telnet_byte option, const t
 {
   if (!(nvt && nvt->send_callback))
     return 0;
+  return 1;
+}
+
+int telnet_nvt_halt(telnet_nvt* nvt)
+{
+  if (!nvt)
+    return 0;
+
+  if (nvt->p)
+  {
+    // Force the parser to stop where it's at.
+    nvt->pe = nvt->p + 1;
+    nvt->eof = nvt->pe;
+  }
+  
   return 1;
 }

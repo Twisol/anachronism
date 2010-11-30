@@ -42,8 +42,6 @@ static void got_option(telnet_nvt* nvt, telnet_byte command, telnet_byte option)
     case IAC_WONT: strCommand = "wont"; break;
     case IAC_DO:   strCommand = "do";   break;
     case IAC_DONT: strCommand = "dont"; break;
-    default:
-      assert("Got something other than WILL/WONT/DO/DONT!");
   }
   
   VALUE data = rb_ary_new3(2, INT2FIX(option), STR2SYM(strCommand));
@@ -117,9 +115,11 @@ static VALUE parser_process(VALUE self, VALUE data)
   size_t len = RSTRING_LEN(rb_str);
   
   // Pass the string to the parser.
-  telnet_nvt_parse(NVT(nvt), str, len);
-  
-  return Qnil;
+  size_t bytes_used = telnet_nvt_parse(NVT(nvt), str, len);
+  if (bytes_used == len)
+    return Qnil;
+  else
+    return rb_str_new(str+bytes_used, len-bytes_used);
 }
 
 static VALUE parser_send_text(VALUE self, VALUE data)
@@ -149,6 +149,16 @@ static VALUE parser_send_command(VALUE self, VALUE command)
   }
   
   telnet_nvt_command(NVT(nvt), NUM2INT(command));
+  return Qnil;
+}
+
+static VALUE parser_halt(VALUE self)
+{
+  rb_telnet_nvt* nvt = NULL;
+  Data_Get_Struct(self, rb_telnet_nvt, nvt);
+  
+  telnet_nvt_halt(nvt);
+  return Qnil;
 }
 
 void Init_anachronism()
@@ -161,4 +171,5 @@ void Init_anachronism()
   rb_define_method(cNVT, "process", parser_process, 1);
   rb_define_method(cNVT, "send_text", parser_send_text, 1);
   rb_define_method(cNVT, "send_command", parser_send_command, 1);
+  rb_define_method(cNVT, "halt", parser_halt, 0);
 }

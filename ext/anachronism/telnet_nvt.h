@@ -50,6 +50,10 @@ typedef void (*telnet_send_callback)(telnet_nvt* nvt, const telnet_byte* data, s
 struct telnet_nvt
 {
   int cs; /* current Ragel state */
+  const telnet_byte* p; /* current position */
+  const telnet_byte* pe; /* end of current packet */
+  const telnet_byte* eof; /* end-of-file marker */
+  
   telnet_byte option_mark; /* temporary storage for a command byte */
   unsigned char options[256]; /* track the state of each subnegotiation option */
   
