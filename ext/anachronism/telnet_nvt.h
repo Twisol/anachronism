@@ -33,8 +33,6 @@ typedef enum telnet_command
   IAC_DONT,
 } telnet_command;
 
-/* Forward declaration for the callbacks */
-struct telnet_nvt;
 typedef struct telnet_nvt telnet_nvt;
 
 typedef void (*telnet_text_callback)(telnet_nvt* nvt, const telnet_byte* data, size_t length);
@@ -47,31 +45,27 @@ typedef void (*telnet_error_callback)(telnet_nvt* nvt, int fatal, const char* me
 
 typedef void (*telnet_send_callback)(telnet_nvt* nvt, const telnet_byte* data, size_t length);
 
-struct telnet_nvt
+typedef struct telnet_callbacks
 {
-  int cs; /* current Ragel state */
-  const telnet_byte* p; /* current position */
-  const telnet_byte* pe; /* end of current packet */
-  const telnet_byte* eof; /* end-of-file marker */
+  telnet_text_callback    on_text;
+  telnet_command_callback on_command;
+  telnet_option_callback  on_option;
   
-  telnet_byte option_mark; /* temporary storage for a command byte */
-  unsigned char options[256]; /* track the state of each subnegotiation option */
-  
-  telnet_byte* buf; /* Buffer to build up a stretch of text in. */
-  size_t buflen; /* Length so far of the buffer. */
+  telnet_mode_callback    on_mode;
+  telnet_error_callback   on_error;
 
-  telnet_text_callback    text_callback;
-  telnet_command_callback command_callback;
-  telnet_option_callback  option_callback;
-  
-  telnet_mode_callback    mode_callback;
-  telnet_error_callback   error_callback;
-
-  telnet_send_callback    send_callback;
-};
+  telnet_send_callback    on_send;
+} telnet_callbacks;
 
 
-int telnet_nvt_init(telnet_nvt* nvt);
+telnet_nvt* telnet_nvt_new();
+void telnet_nvt_delete(telnet_nvt* nvt);
+
+int telnet_nvt_get_callbacks(telnet_nvt* nvt, telnet_callbacks** callbacks);
+
+int telnet_nvt_set_userdata(telnet_nvt* nvt, void* udata);
+int telnet_nvt_get_userdata(telnet_nvt* nvt, void** udata);
+
 int telnet_nvt_parse(telnet_nvt* nvt, const telnet_byte* data, const size_t length);
 
 int telnet_nvt_text(telnet_nvt* nvt, const telnet_byte* data, const size_t length);
