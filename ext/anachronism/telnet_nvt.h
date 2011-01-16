@@ -31,6 +31,7 @@ typedef enum telnet_command
   IAC_WONT,
   IAC_DO,
   IAC_DONT,
+  IAC_IAC,
 } telnet_command;
 
 typedef struct telnet_nvt telnet_nvt;

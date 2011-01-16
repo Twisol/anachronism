@@ -108,7 +108,7 @@ static VALUE parser_initialize(VALUE self, VALUE callbacks)
 
 static VALUE parser_process(VALUE self, VALUE data)
 {
-  telnet_nvt* nvt = Qnil;
+  telnet_nvt* nvt = NULL;
   Data_Get_Struct(self, telnet_nvt, nvt);
   
   // Prepare the data as a string
@@ -122,7 +122,7 @@ static VALUE parser_process(VALUE self, VALUE data)
 
 static VALUE parser_send_text(VALUE self, VALUE data)
 {
-  telnet_nvt* nvt = Qnil;
+  telnet_nvt* nvt = NULL;
   Data_Get_Struct(self, telnet_nvt, nvt);
   
   // Prepare the data as a string
@@ -136,10 +136,19 @@ static VALUE parser_send_text(VALUE self, VALUE data)
 
 static VALUE parser_send_command(VALUE self, VALUE command)
 {
-  telnet_nvt* nvt = Qnil;
+  telnet_nvt* nvt = NULL;
   Data_Get_Struct(self, telnet_nvt, nvt);
   
   telnet_nvt_command(nvt, NUM2INT(command));
+  return Qnil;
+}
+
+static VALUE parser_send_option(VALUE self, VALUE command, VALUE option)
+{
+  telnet_nvt* nvt = NULL;
+  Data_Get_Struct(self, telnet_nvt, nvt);
+  
+  telnet_nvt_option(nvt, NUM2INT(command), NUM2INT(option));
   return Qnil;
 }
 
@@ -162,5 +171,6 @@ void Init_anachronism()
   rb_define_method(cNative, "process", parser_process, 1);
   rb_define_method(cNative, "send_text", parser_send_text, 1);
   rb_define_method(cNative, "send_command", parser_send_command, 1);
+  rb_define_method(cNative, "send_option", parser_send_option, 2);
   rb_define_method(cNative, "halt", parser_halt, 0);
 }

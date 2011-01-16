@@ -466,17 +466,30 @@ int telnet_nvt_command(telnet_nvt* nvt, const telnet_command command)
     return 0;
   else if (!nvt->callbacks.on_send)
     return 1; // immediate success since they apparently don't want the data to go anywhere
+  else if ((command >= IAC_SB && command <= IAC_IAC) || command == IAC_SE) 
+    return -1; // Invalid command
   
   buf[1] = command;
-  nvt->callbacks.on_send(nvt, (const telnet_byte*)buf, 2);
+  nvt->callbacks.on_send(nvt, buf, 2);
   
   return 1;
 }
 
 int telnet_nvt_option(telnet_nvt* nvt, const telnet_command command, const telnet_byte option)
 {
+  static telnet_byte buf[] = {'\xFF', 0, 0};
+  
   if (!(nvt && nvt->callbacks.on_send))
     return 0;
+  else if (!nvt->callbacks.on_send)
+    return 1; // immediate success since they apparently don't want the data to go anywhere
+  else if (command < IAC_WILL || command > IAC_DONT)
+    return -1; // Invalid option command
+  
+  buf[1] = (telnet_byte)command;
+  buf[2] = option;
+  nvt->callbacks.on_send(nvt, buf, 3);
+  
   return 1;
 }
 
