@@ -3,6 +3,39 @@
 #include <string.h>
 #include "telnet_nvt.h"
 
+#define BASE_EV(ev, t) \
+  (ev).type = TELNET_EV_##t
+
+#define EV_TEXT(ev, text, len) {\
+  BASE_EV(ev, TEXT);\
+  (ev).text_event.data = (text);\
+  (ev).text_event.length = (len);\
+}
+
+#define EV_COMMAND(ev, cmd) {\
+  BASE_EV(ev, COMMAND);\
+  (ev).command_event.command = (cmd);\
+}
+
+#define EV_OPTION(ev, cmd, opt) {\
+  BASE_EV(ev, OPTION);\
+  (ev).option_event.command = (cmd);\
+  (ev).option_event.option = (opt);\
+}
+
+#define EV_SUBNEGOTIATION(ev, act, opt) {\
+  BASE_EV(ev, SUBNEGOTIATION);\
+  (ev).subnegotiation_event.active = (act);\
+  (ev).subnegotiation_event.option = (opt);\
+}
+
+#define EV_WARNING(ev, msg, pos) {\
+  BASE_EV(ev, WARNING);\
+  (ev).warning_event.message = (msg);\
+  (ev).warning_event.position = (pos);\
+}
+
+
 struct telnet_nvt
 {
   int cs; /* current Ragel state */
@@ -29,47 +62,74 @@ struct telnet_nvt
   variable eof nvt->eof;
   
   action flush_text {
-    if (nvt->callbacks.on_text && nvt->buflen > 0)
+    if (nvt->callbacks.on_recv && nvt->buflen > 0)
     {
-      nvt->callbacks.on_text(nvt, nvt->buf, nvt->buflen);
+      telnet_event ev;
+      EV_TEXT(ev, nvt->buf, nvt->buflen);
+      nvt->callbacks.on_recv(nvt, &ev);
       nvt->buflen = 0;
     }
   }
   
   action char {
-    if (nvt->callbacks.on_text)
+    if (nvt->callbacks.on_recv)
       nvt->buf[nvt->buflen++] = fc;
   }
   
   action basic_command {
-    if (nvt->callbacks.on_command)
-      nvt->callbacks.on_command(nvt, fc);
+    if (nvt->callbacks.on_recv)
+    {
+      telnet_event ev;
+      EV_COMMAND(ev, fc);
+      nvt->callbacks.on_recv(nvt, &ev);
+    }
   }
 
   action option_mark {
     nvt->option_mark= fc;
   }
   action option_command {
-    if (nvt->callbacks.on_option)
-      nvt->callbacks.on_option(nvt, nvt->option_mark, fc);
+    if (nvt->callbacks.on_recv)
+    {
+      telnet_event ev;
+      EV_OPTION(ev, nvt->option_mark, fc);
+      nvt->callbacks.on_recv(nvt, &ev);
+    }
   }
 
   action subneg_command {
-    if (nvt->callbacks.on_mode)
-      nvt->callbacks.on_mode(nvt, TELNET_SUBNEG, fc);
+    nvt->option_mark = fc;
+    if (nvt->callbacks.on_recv)
+    {
+      telnet_event ev;
+      EV_SUBNEGOTIATION(ev, 1, nvt->option_mark);
+      nvt->callbacks.on_recv(nvt, &ev);
+    }
   }
   action subneg_command_end {
-    if (nvt->callbacks.on_mode)
-      nvt->callbacks.on_mode(nvt, TELNET_TEXT, 0);
+    if (nvt->callbacks.on_recv)
+    {
+      telnet_event ev;
+      EV_SUBNEGOTIATION(ev, 0, nvt->option_mark);
+      nvt->callbacks.on_recv(nvt, &ev);
+    }
   }
 
   action warning_cr {
-    if (nvt->callbacks.on_error)
-      nvt->callbacks.on_error(nvt, TELNET_WARNING, "Invalid \\r: not followed by \\n or \\0.", fpc-data);
+    if (nvt->callbacks.on_recv)
+    {
+      telnet_event ev;
+      EV_WARNING(ev, "Invalid \\r: not followed by \\n or \\0.", fpc-data);
+      nvt->callbacks.on_recv(nvt, &ev);
+    }
   }
   action warning_iac {
-    if (nvt->callbacks.on_error)
-      nvt->callbacks.on_error(nvt, TELNET_WARNING, "IAC followed by invalid command.", fpc-data);
+    if (nvt->callbacks.on_recv)
+    {
+      telnet_event ev;
+      EV_WARNING(ev, "IAC followed by invalid command.", fpc-data);
+      nvt->callbacks.on_recv(nvt, &ev);
+    }
   }
   
   include telnet_nvt_common "telnet_common.rl";
@@ -117,13 +177,13 @@ int telnet_nvt_get_userdata(telnet_nvt* nvt, void** userdata)
   return 1;
 }
 
-int telnet_nvt_parse(telnet_nvt* nvt, const telnet_byte* data, const size_t length)
+int telnet_nvt_recv(telnet_nvt* nvt, const telnet_byte* data, const size_t length)
 {
   if (!nvt)
     return -1;
   
   // Only bother saving text if it'll be used
-  if (nvt->callbacks.on_text)
+  if (nvt->callbacks.on_recv)
   {
     // Because of how the parser translates data, a run of text is guaranteed to
     // be at most 'length' characters long. In practice it's usually less, due to

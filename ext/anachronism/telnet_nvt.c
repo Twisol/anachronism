@@ -5,6 +5,39 @@
 #include <string.h>
 #include "telnet_nvt.h"
 
+#define BASE_EV(ev, t) \
+  (ev).type = TELNET_EV_##t
+
+#define EV_TEXT(ev, text, len) {\
+  BASE_EV(ev, TEXT);\
+  (ev).text_event.data = (text);\
+  (ev).text_event.length = (len);\
+}
+
+#define EV_COMMAND(ev, cmd) {\
+  BASE_EV(ev, COMMAND);\
+  (ev).command_event.command = (cmd);\
+}
+
+#define EV_OPTION(ev, cmd, opt) {\
+  BASE_EV(ev, OPTION);\
+  (ev).option_event.command = (cmd);\
+  (ev).option_event.option = (opt);\
+}
+
+#define EV_SUBNEGOTIATION(ev, act, opt) {\
+  BASE_EV(ev, SUBNEGOTIATION);\
+  (ev).subnegotiation_event.active = (act);\
+  (ev).subnegotiation_event.option = (opt);\
+}
+
+#define EV_WARNING(ev, msg, pos) {\
+  BASE_EV(ev, WARNING);\
+  (ev).warning_event.message = (msg);\
+  (ev).warning_event.position = (pos);\
+}
+
+
 struct telnet_nvt
 {
   int cs; /* current Ragel state */
@@ -23,7 +56,7 @@ struct telnet_nvt
 };
 
 
-#line 27 "ext/anachronism/telnet_nvt.c"
+#line 60 "ext/anachronism/telnet_nvt.c"
 static const int telnet_nvt_start = 7;
 static const int telnet_nvt_first_final = 7;
 static const int telnet_nvt_error = -1;
@@ -31,7 +64,7 @@ static const int telnet_nvt_error = -1;
 static const int telnet_nvt_en_main = 7;
 
 
-#line 77 "ext/anachronism/telnet_nvt.rl"
+#line 137 "ext/anachronism/telnet_nvt.rl"
 
 
 telnet_nvt* telnet_nvt_new()
@@ -40,12 +73,12 @@ telnet_nvt* telnet_nvt_new()
   memset(nvt, 0, sizeof(*nvt));
   
   
-#line 44 "ext/anachronism/telnet_nvt.c"
+#line 77 "ext/anachronism/telnet_nvt.c"
 	{
 	 nvt->cs = telnet_nvt_start;
 	}
 
-#line 85 "ext/anachronism/telnet_nvt.rl"
+#line 145 "ext/anachronism/telnet_nvt.rl"
   
   return nvt;
 }
@@ -81,13 +114,13 @@ int telnet_nvt_get_userdata(telnet_nvt* nvt, void** userdata)
   return 1;
 }
 
-int telnet_nvt_parse(telnet_nvt* nvt, const telnet_byte* data, const size_t length)
+int telnet_nvt_recv(telnet_nvt* nvt, const telnet_byte* data, const size_t length)
 {
   if (!nvt)
     return -1;
   
   // Only bother saving text if it'll be used
-  if (nvt->callbacks.on_text)
+  if (nvt->callbacks.on_recv)
   {
     // Because of how the parser translates data, a run of text is guaranteed to
     // be at most 'length' characters long. In practice it's usually less, due to
@@ -103,7 +136,7 @@ int telnet_nvt_parse(telnet_nvt* nvt, const telnet_byte* data, const size_t leng
   nvt->eof = nvt->pe;
   
   
-#line 107 "ext/anachronism/telnet_nvt.c"
+#line 140 "ext/anachronism/telnet_nvt.c"
 	{
 	if ( ( nvt->p) == ( nvt->pe) )
 		goto _test_eof;
@@ -112,120 +145,162 @@ int telnet_nvt_parse(telnet_nvt* nvt, const telnet_byte* data, const size_t leng
 tr1:
 #line 6 "ext/anachronism/telnet_nvt.rl"
 	{( nvt->p)--;}
-#line 31 "ext/anachronism/telnet_nvt.rl"
+#line 64 "ext/anachronism/telnet_nvt.rl"
 	{
-    if (nvt->callbacks.on_text && nvt->buflen > 0)
+    if (nvt->callbacks.on_recv && nvt->buflen > 0)
     {
-      nvt->callbacks.on_text(nvt, nvt->buf, nvt->buflen);
+      telnet_event ev;
+      EV_TEXT(ev, nvt->buf, nvt->buflen);
+      nvt->callbacks.on_recv(nvt, &ev);
       nvt->buflen = 0;
     }
   }
-#line 66 "ext/anachronism/telnet_nvt.rl"
+#line 118 "ext/anachronism/telnet_nvt.rl"
 	{
-    if (nvt->callbacks.on_error)
-      nvt->callbacks.on_error(nvt, TELNET_WARNING, "Invalid \\r: not followed by \\n or \\0.", ( nvt->p)-data);
+    if (nvt->callbacks.on_recv)
+    {
+      telnet_event ev;
+      EV_WARNING(ev, "Invalid \\r: not followed by \\n or \\0.", ( nvt->p)-data);
+      nvt->callbacks.on_recv(nvt, &ev);
+    }
   }
 	goto st7;
 tr2:
-#line 39 "ext/anachronism/telnet_nvt.rl"
+#line 74 "ext/anachronism/telnet_nvt.rl"
 	{
-    if (nvt->callbacks.on_text)
+    if (nvt->callbacks.on_recv)
       nvt->buf[nvt->buflen++] = (*( nvt->p));
   }
 	goto st7;
 tr3:
-#line 31 "ext/anachronism/telnet_nvt.rl"
+#line 64 "ext/anachronism/telnet_nvt.rl"
 	{
-    if (nvt->callbacks.on_text && nvt->buflen > 0)
+    if (nvt->callbacks.on_recv && nvt->buflen > 0)
     {
-      nvt->callbacks.on_text(nvt, nvt->buf, nvt->buflen);
+      telnet_event ev;
+      EV_TEXT(ev, nvt->buf, nvt->buflen);
+      nvt->callbacks.on_recv(nvt, &ev);
       nvt->buflen = 0;
     }
   }
-#line 70 "ext/anachronism/telnet_nvt.rl"
+#line 126 "ext/anachronism/telnet_nvt.rl"
 	{
-    if (nvt->callbacks.on_error)
-      nvt->callbacks.on_error(nvt, TELNET_WARNING, "IAC followed by invalid command.", ( nvt->p)-data);
+    if (nvt->callbacks.on_recv)
+    {
+      telnet_event ev;
+      EV_WARNING(ev, "IAC followed by invalid command.", ( nvt->p)-data);
+      nvt->callbacks.on_recv(nvt, &ev);
+    }
   }
-#line 44 "ext/anachronism/telnet_nvt.rl"
+#line 79 "ext/anachronism/telnet_nvt.rl"
 	{
-    if (nvt->callbacks.on_command)
-      nvt->callbacks.on_command(nvt, (*( nvt->p)));
+    if (nvt->callbacks.on_recv)
+    {
+      telnet_event ev;
+      EV_COMMAND(ev, (*( nvt->p)));
+      nvt->callbacks.on_recv(nvt, &ev);
+    }
   }
 	goto st7;
 tr4:
-#line 31 "ext/anachronism/telnet_nvt.rl"
+#line 64 "ext/anachronism/telnet_nvt.rl"
 	{
-    if (nvt->callbacks.on_text && nvt->buflen > 0)
+    if (nvt->callbacks.on_recv && nvt->buflen > 0)
     {
-      nvt->callbacks.on_text(nvt, nvt->buf, nvt->buflen);
+      telnet_event ev;
+      EV_TEXT(ev, nvt->buf, nvt->buflen);
+      nvt->callbacks.on_recv(nvt, &ev);
       nvt->buflen = 0;
     }
   }
-#line 44 "ext/anachronism/telnet_nvt.rl"
+#line 79 "ext/anachronism/telnet_nvt.rl"
 	{
-    if (nvt->callbacks.on_command)
-      nvt->callbacks.on_command(nvt, (*( nvt->p)));
+    if (nvt->callbacks.on_recv)
+    {
+      telnet_event ev;
+      EV_COMMAND(ev, (*( nvt->p)));
+      nvt->callbacks.on_recv(nvt, &ev);
+    }
   }
 	goto st7;
 tr13:
-#line 31 "ext/anachronism/telnet_nvt.rl"
+#line 64 "ext/anachronism/telnet_nvt.rl"
 	{
-    if (nvt->callbacks.on_text && nvt->buflen > 0)
+    if (nvt->callbacks.on_recv && nvt->buflen > 0)
     {
-      nvt->callbacks.on_text(nvt, nvt->buf, nvt->buflen);
+      telnet_event ev;
+      EV_TEXT(ev, nvt->buf, nvt->buflen);
+      nvt->callbacks.on_recv(nvt, &ev);
       nvt->buflen = 0;
     }
   }
 #line 6 "ext/anachronism/telnet_nvt.rl"
 	{( nvt->p)--;}
-#line 70 "ext/anachronism/telnet_nvt.rl"
+#line 126 "ext/anachronism/telnet_nvt.rl"
 	{
-    if (nvt->callbacks.on_error)
-      nvt->callbacks.on_error(nvt, TELNET_WARNING, "IAC followed by invalid command.", ( nvt->p)-data);
+    if (nvt->callbacks.on_recv)
+    {
+      telnet_event ev;
+      EV_WARNING(ev, "IAC followed by invalid command.", ( nvt->p)-data);
+      nvt->callbacks.on_recv(nvt, &ev);
+    }
   }
-#line 61 "ext/anachronism/telnet_nvt.rl"
+#line 109 "ext/anachronism/telnet_nvt.rl"
 	{
-    if (nvt->callbacks.on_mode)
-      nvt->callbacks.on_mode(nvt, TELNET_TEXT, 0);
+    if (nvt->callbacks.on_recv)
+    {
+      telnet_event ev;
+      EV_SUBNEGOTIATION(ev, 0, nvt->option_mark);
+      nvt->callbacks.on_recv(nvt, &ev);
+    }
   }
 	goto st7;
 tr14:
-#line 31 "ext/anachronism/telnet_nvt.rl"
+#line 64 "ext/anachronism/telnet_nvt.rl"
 	{
-    if (nvt->callbacks.on_text && nvt->buflen > 0)
+    if (nvt->callbacks.on_recv && nvt->buflen > 0)
     {
-      nvt->callbacks.on_text(nvt, nvt->buf, nvt->buflen);
+      telnet_event ev;
+      EV_TEXT(ev, nvt->buf, nvt->buflen);
+      nvt->callbacks.on_recv(nvt, &ev);
       nvt->buflen = 0;
     }
   }
-#line 61 "ext/anachronism/telnet_nvt.rl"
+#line 109 "ext/anachronism/telnet_nvt.rl"
 	{
-    if (nvt->callbacks.on_mode)
-      nvt->callbacks.on_mode(nvt, TELNET_TEXT, 0);
+    if (nvt->callbacks.on_recv)
+    {
+      telnet_event ev;
+      EV_SUBNEGOTIATION(ev, 0, nvt->option_mark);
+      nvt->callbacks.on_recv(nvt, &ev);
+    }
   }
 	goto st7;
 tr15:
-#line 52 "ext/anachronism/telnet_nvt.rl"
+#line 91 "ext/anachronism/telnet_nvt.rl"
 	{
-    if (nvt->callbacks.on_option)
-      nvt->callbacks.on_option(nvt, nvt->option_mark, (*( nvt->p)));
+    if (nvt->callbacks.on_recv)
+    {
+      telnet_event ev;
+      EV_OPTION(ev, nvt->option_mark, (*( nvt->p)));
+      nvt->callbacks.on_recv(nvt, &ev);
+    }
   }
 	goto st7;
 st7:
 	if ( ++( nvt->p) == ( nvt->pe) )
 		goto _test_eof7;
 case 7:
-#line 220 "ext/anachronism/telnet_nvt.c"
+#line 295 "ext/anachronism/telnet_nvt.c"
 	switch( (*( nvt->p)) ) {
 		case 13u: goto tr16;
 		case 255u: goto st1;
 	}
 	goto tr2;
 tr16:
-#line 39 "ext/anachronism/telnet_nvt.rl"
+#line 74 "ext/anachronism/telnet_nvt.rl"
 	{
-    if (nvt->callbacks.on_text)
+    if (nvt->callbacks.on_recv)
       nvt->buf[nvt->buflen++] = (*( nvt->p));
   }
 	goto st0;
@@ -233,7 +308,7 @@ st0:
 	if ( ++( nvt->p) == ( nvt->pe) )
 		goto _test_eof0;
 case 0:
-#line 237 "ext/anachronism/telnet_nvt.c"
+#line 312 "ext/anachronism/telnet_nvt.c"
 	switch( (*( nvt->p)) ) {
 		case 0u: goto st7;
 		case 10u: goto tr2;
@@ -254,11 +329,13 @@ case 1:
 		goto tr4;
 	goto tr3;
 tr5:
-#line 31 "ext/anachronism/telnet_nvt.rl"
+#line 64 "ext/anachronism/telnet_nvt.rl"
 	{
-    if (nvt->callbacks.on_text && nvt->buflen > 0)
+    if (nvt->callbacks.on_recv && nvt->buflen > 0)
     {
-      nvt->callbacks.on_text(nvt, nvt->buf, nvt->buflen);
+      telnet_event ev;
+      EV_TEXT(ev, nvt->buf, nvt->buflen);
+      nvt->callbacks.on_recv(nvt, &ev);
       nvt->buflen = 0;
     }
   }
@@ -267,53 +344,64 @@ st2:
 	if ( ++( nvt->p) == ( nvt->pe) )
 		goto _test_eof2;
 case 2:
-#line 271 "ext/anachronism/telnet_nvt.c"
+#line 348 "ext/anachronism/telnet_nvt.c"
 	goto tr7;
 tr12:
 #line 6 "ext/anachronism/telnet_nvt.rl"
 	{( nvt->p)--;}
-#line 31 "ext/anachronism/telnet_nvt.rl"
+#line 64 "ext/anachronism/telnet_nvt.rl"
 	{
-    if (nvt->callbacks.on_text && nvt->buflen > 0)
+    if (nvt->callbacks.on_recv && nvt->buflen > 0)
     {
-      nvt->callbacks.on_text(nvt, nvt->buf, nvt->buflen);
+      telnet_event ev;
+      EV_TEXT(ev, nvt->buf, nvt->buflen);
+      nvt->callbacks.on_recv(nvt, &ev);
       nvt->buflen = 0;
     }
   }
-#line 66 "ext/anachronism/telnet_nvt.rl"
+#line 118 "ext/anachronism/telnet_nvt.rl"
 	{
-    if (nvt->callbacks.on_error)
-      nvt->callbacks.on_error(nvt, TELNET_WARNING, "Invalid \\r: not followed by \\n or \\0.", ( nvt->p)-data);
+    if (nvt->callbacks.on_recv)
+    {
+      telnet_event ev;
+      EV_WARNING(ev, "Invalid \\r: not followed by \\n or \\0.", ( nvt->p)-data);
+      nvt->callbacks.on_recv(nvt, &ev);
+    }
   }
 	goto st3;
 tr8:
-#line 39 "ext/anachronism/telnet_nvt.rl"
+#line 74 "ext/anachronism/telnet_nvt.rl"
 	{
-    if (nvt->callbacks.on_text)
+    if (nvt->callbacks.on_recv)
       nvt->buf[nvt->buflen++] = (*( nvt->p));
   }
 	goto st3;
 tr7:
-#line 57 "ext/anachronism/telnet_nvt.rl"
+#line 100 "ext/anachronism/telnet_nvt.rl"
 	{
-    if (nvt->callbacks.on_mode)
-      nvt->callbacks.on_mode(nvt, TELNET_SUBNEG, (*( nvt->p)));
+    nvt->option_mark = (*( nvt->p));
+    if (nvt->callbacks.on_recv)
+    {
+      telnet_event ev;
+      EV_SUBNEGOTIATION(ev, 1, nvt->option_mark);
+      nvt->callbacks.on_recv(nvt, &ev);
+    }
   }
 	goto st3;
 st3:
 	if ( ++( nvt->p) == ( nvt->pe) )
 		goto _test_eof3;
 case 3:
-#line 308 "ext/anachronism/telnet_nvt.c"
+#line 396 "ext/anachronism/telnet_nvt.c"
 	switch( (*( nvt->p)) ) {
 		case 13u: goto tr9;
 		case 255u: goto st5;
 	}
 	goto tr8;
 tr9:
-#line 39 "ext/anachronism/telnet_nvt.rl"
+#line 74 "ext/anachronism/telnet_nvt.rl"
 	{
-    if (nvt->callbacks.on_text)
+    if (nvt->callbacks.on_recv)
       nvt->buf[nvt->buflen++] = (*( nvt->p));
   }
 	goto st4;
@@ -321,7 +409,7 @@ st4:
 	if ( ++( nvt->p) == ( nvt->pe) )
 		goto _test_eof4;
 case 4:
-#line 325 "ext/anachronism/telnet_nvt.c"
+#line 413 "ext/anachronism/telnet_nvt.c"
 	switch( (*( nvt->p)) ) {
 		case 0u: goto st3;
 		case 10u: goto tr8;
@@ -337,15 +425,17 @@ case 5:
 	}
 	goto tr13;
 tr6:
-#line 31 "ext/anachronism/telnet_nvt.rl"
+#line 64 "ext/anachronism/telnet_nvt.rl"
 	{
-    if (nvt->callbacks.on_text && nvt->buflen > 0)
+    if (nvt->callbacks.on_recv && nvt->buflen > 0)
     {
-      nvt->callbacks.on_text(nvt, nvt->buf, nvt->buflen);
+      telnet_event ev;
+      EV_TEXT(ev, nvt->buf, nvt->buflen);
+      nvt->callbacks.on_recv(nvt, &ev);
       nvt->buflen = 0;
     }
   }
-#line 49 "ext/anachronism/telnet_nvt.rl"
+#line 88 "ext/anachronism/telnet_nvt.rl"
 	{
     nvt->option_mark= (*( nvt->p));
   }
@@ -354,7 +444,7 @@ st6:
 	if ( ++( nvt->p) == ( nvt->pe) )
 		goto _test_eof6;
 case 6:
-#line 358 "ext/anachronism/telnet_nvt.c"
+#line 448 "ext/anachronism/telnet_nvt.c"
 	goto tr15;
 	}
 	_test_eof7:  nvt->cs = 7; goto _test_eof; 
@@ -371,22 +461,24 @@ case 6:
 	{
 	switch (  nvt->cs ) {
 	case 7: 
-#line 31 "ext/anachronism/telnet_nvt.rl"
+#line 64 "ext/anachronism/telnet_nvt.rl"
 	{
-    if (nvt->callbacks.on_text && nvt->buflen > 0)
+    if (nvt->callbacks.on_recv && nvt->buflen > 0)
     {
-      nvt->callbacks.on_text(nvt, nvt->buf, nvt->buflen);
+      telnet_event ev;
+      EV_TEXT(ev, nvt->buf, nvt->buflen);
+      nvt->callbacks.on_recv(nvt, &ev);
       nvt->buflen = 0;
     }
   }
 	break;
-#line 384 "ext/anachronism/telnet_nvt.c"
+#line 476 "ext/anachronism/telnet_nvt.c"
 	}
 	}
 
 	}
 
-#line 142 "ext/anachronism/telnet_nvt.rl"
+#line 202 "ext/anachronism/telnet_nvt.rl"
   
   size_t bytes_used = nvt->p - data;
   
