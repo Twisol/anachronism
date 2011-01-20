@@ -148,7 +148,8 @@ static VALUE parser_recv(VALUE self, VALUE data)
   const telnet_byte* str = (const telnet_byte*)RSTRING_PTR(rb_str);
   size_t len = RSTRING_LEN(rb_str);
   
-  size_t bytes_used = telnet_nvt_recv(nvt, str, len);
+  size_t bytes_used;
+  telnet_nvt_recv(nvt, str, len, &bytes_used);
   return rb_str_substr(rb_str, bytes_used, len-bytes_used);
 }
 
@@ -162,7 +163,9 @@ static VALUE parser_send_text(VALUE self, VALUE data)
   const telnet_byte* str = (const telnet_byte*)RSTRING_PTR(rb_str);
   size_t len = RSTRING_LEN(rb_str);
   
+  // TODO: Handle TELNET_E_ALLOC error case
   telnet_nvt_text(nvt, str, len);
+  
   return Qnil;
 }
 

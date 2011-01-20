@@ -1,5 +1,4 @@
 #include <stdlib.h>
-#include <stdio.h>
 #include <string.h>
 #include "telnet_nvt.h"
 
@@ -51,6 +50,7 @@ struct telnet_nvt
   
   telnet_callbacks callbacks;
   void* userdata;
+  int subnegotiating;
 };
 
 %%{
@@ -151,36 +151,37 @@ void telnet_nvt_delete(telnet_nvt* nvt)
   free(nvt);
 }
 
-int telnet_nvt_get_callbacks(telnet_nvt* nvt, telnet_callbacks** callbacks)
+telnet_error telnet_nvt_get_callbacks(telnet_nvt* nvt, telnet_callbacks** callbacks)
 {
   if (!nvt)
-    return 0;
+    return TELNET_E_BAD_NVT;
   
   *callbacks = &nvt->callbacks;
+  return TELNET_E_OK;
 }
 
-int telnet_nvt_set_userdata(telnet_nvt* nvt, void* userdata)
+telnet_error telnet_nvt_set_userdata(telnet_nvt* nvt, void* userdata)
 {
   if (!nvt)
-    return 0;
+    return TELNET_E_BAD_NVT;
   
   nvt->userdata = userdata;
-  return 1;
+  return TELNET_E_OK;
 }
 
-int telnet_nvt_get_userdata(telnet_nvt* nvt, void** userdata)
+telnet_error telnet_nvt_get_userdata(telnet_nvt* nvt, void** userdata)
 {
   if (!nvt)
-    return 0;
+    return TELNET_E_BAD_NVT;
   
   *userdata = nvt->userdata;
-  return 1;
+  return TELNET_E_OK;
 }
 
-int telnet_nvt_recv(telnet_nvt* nvt, const telnet_byte* data, const size_t length)
+telnet_error telnet_nvt_recv(telnet_nvt* nvt, const telnet_byte* data, const size_t length, size_t* bytes_used)
 {
   if (!nvt)
-    return -1;
+    return TELNET_E_BAD_NVT;
   
   // Only bother saving text if it'll be used
   if (nvt->callbacks.on_recv)
@@ -200,60 +201,69 @@ int telnet_nvt_recv(telnet_nvt* nvt, const telnet_byte* data, const size_t lengt
   
   %% write exec;
   
-  size_t bytes_used = nvt->p - data;
+  if (bytes_used != NULL)
+    *bytes_used = nvt->p - data;
   
   free(nvt->buf);
   nvt->buf = NULL;
   nvt->p = nvt->pe = nvt->eof = NULL;
   
-  return bytes_used;
+  return TELNET_E_OK;
 }
 
-int telnet_nvt_text(telnet_nvt* nvt, const telnet_byte* data, const size_t length)
+telnet_error telnet_nvt_halt(telnet_nvt* nvt)
 {
   if (!nvt)
-    return 0;
+    return TELNET_E_BAD_NVT;
+  
+  // Force the parser to stop where it's at.
+  if (nvt->p)
+    nvt->eof = nvt->pe = nvt->p + 1;
+  
+  return TELNET_E_OK;
+}
+
+telnet_error telnet_nvt_text(telnet_nvt* nvt, const telnet_byte* data, const size_t length)
+{
+  if (!nvt)
+    return TELNET_E_BAD_NVT;
   else if (!nvt->callbacks.on_send)
-    return 1; // immediate success since they apparently don't want the data to go anywhere
+    return TELNET_E_OK; // immediate success since they apparently don't want the data to go anywhere
   
   // Due to the nature of the protocol, the most any one byte can be encoded as is two bytes.
   // Hence, the smallest buffer guaranteed to contain any input is double the length of the source.
   telnet_byte* buf = malloc(length * 2 * sizeof(*buf));
   if (!buf)
-    return 0; // unable to allocate a buffer
+    return TELNET_E_ALLOC;
   size_t buflen = 0;
   
+  // Find the 'special' characters and escape them properly
   size_t left = 0;
   size_t right = 0;
+  const char* seq = NULL;
   for (; right < length; ++right)
   {
     switch (data[right])
     {
       case '\r':
-        memcpy(buf+buflen, data+left, right-left);
-        buflen += right - left;
-        left = right + 1;
-        
-        memcpy(buf+buflen, "\r\0", 2);
-        buflen += 2;
+        seq = "\r\0";
         break;
       case '\n':
-        memcpy(buf+buflen, data+left, right-left);
-        buflen += right - left;
-        left = right + 1;
-        
-        memcpy(buf+buflen, "\r\n", 2);
-        buflen += 2;
+        seq = "\r\n";
         break;
-      case 255u: // IAC byte
-        memcpy(buf+buflen, data+left, right-left);
-        buflen += right - left;
-        left = right + 1;
-        
-        memcpy(buf+buflen, "\xFF\xFF", 2);
-        buflen += 2;
+      case IAC_IAC:
+        seq = "\xFF\xFF";
         break;
+      default:
+        continue; // Move to the next character
     }
+    
+    memcpy(buf+buflen, data+left, right-left);
+    buflen += right - left;
+    left = right + 1;
+    
+    memcpy(buf+buflen, seq, 2);
+    buflen += 2;
   }
   
   if (left < right)
@@ -267,59 +277,93 @@ int telnet_nvt_text(telnet_nvt* nvt, const telnet_byte* data, const size_t lengt
   free(buf);
   buf = NULL;
   
-  return 1;
+  return TELNET_E_OK;
 }
 
-int telnet_nvt_command(telnet_nvt* nvt, const telnet_command command)
+telnet_error telnet_nvt_command(telnet_nvt* nvt, const telnet_command command)
 {
-  static telnet_byte buf[] = {'\xFF', 0};
-  
   if (!nvt)
-    return 0;
-  else if (!nvt->callbacks.on_send)
-    return 1; // immediate success since they apparently don't want the data to go anywhere
+    return TELNET_E_BAD_NVT;
+  else if (nvt->subnegotiating)
+    return TELNET_E_SUBNEGOTIATING;
   else if ((command >= IAC_SB && command <= IAC_IAC) || command == IAC_SE) 
-    return -1; // Invalid command
+    return TELNET_E_BAD_COMMAND; // Invalid command
   
-  buf[1] = command;
-  nvt->callbacks.on_send(nvt, buf, 2);
+  if (nvt->callbacks.on_send)
+  {
+    const telnet_byte buf[] = {IAC_IAC, (telnet_byte)command};
+    nvt->callbacks.on_send(nvt, buf, 2);
+  }
   
-  return 1;
+  return TELNET_E_OK;
 }
 
-int telnet_nvt_option(telnet_nvt* nvt, const telnet_command command, const telnet_byte option)
-{
-  static telnet_byte buf[] = {'\xFF', 0, 0};
-  
-  if (!(nvt && nvt->callbacks.on_send))
-    return 0;
-  else if (!nvt->callbacks.on_send)
-    return 1; // immediate success since they apparently don't want the data to go anywhere
-  else if (command < IAC_WILL || command > IAC_DONT)
-    return -1; // Invalid option command
-  
-  buf[1] = (telnet_byte)command;
-  buf[2] = option;
-  nvt->callbacks.on_send(nvt, buf, 3);
-  
-  return 1;
-}
-
-int telnet_nvt_subnegotiation(telnet_nvt* nvt, const telnet_byte option, const telnet_byte* data, const size_t length)
-{
-  if (!(nvt && nvt->callbacks.on_send))
-    return 0;
-  return 1;
-}
-
-int telnet_nvt_halt(telnet_nvt* nvt)
+telnet_error telnet_nvt_option(telnet_nvt* nvt, const telnet_command command, const telnet_byte option)
 {
   if (!nvt)
-    return 0;
+    return TELNET_E_BAD_NVT;
+  else if (nvt->subnegotiating)
+    return TELNET_E_SUBNEGOTIATING;
+  else if (command < IAC_WILL || command > IAC_DONT)
+    return TELNET_E_BAD_COMMAND; // Invalid option command
   
-  // Force the parser to stop where it's at.
-  if (nvt->p)
-    nvt->eof = nvt->pe = nvt->p + 1;
+  if (nvt->callbacks.on_send)
+  {
+    const telnet_byte buf[] = {IAC_IAC, (telnet_byte)command, option};
+    nvt->callbacks.on_send(nvt, buf, 3);
+  }
   
-  return 1;
+  return TELNET_E_OK;
+}
+
+telnet_error telnet_nvt_begin_subnegotiation(telnet_nvt* nvt, const telnet_byte option)
+{
+  if (!nvt)
+    return TELNET_E_BAD_NVT;
+  else if (nvt->subnegotiating)
+    return TELNET_E_SUBNEGOTIATING;
+  
+  if (nvt->callbacks.on_send)
+  {
+    const telnet_byte buf[] = {IAC_IAC, IAC_SB, option};
+    nvt->callbacks.on_send(nvt, buf, 3);
+  }
+
+  nvt->subnegotiating = 1;
+  return TELNET_E_OK;
+}
+
+telnet_error telnet_nvt_end_subnegotiation(telnet_nvt* nvt)
+{
+  if (!nvt)
+    return TELNET_E_BAD_NVT;
+  else if (!nvt->subnegotiating)
+    return TELNET_E_SUBNEGOTIATING;
+  
+  if (nvt->callbacks.on_send)
+  {
+    static const telnet_byte buf[] = {IAC_IAC, IAC_SE};
+    nvt->callbacks.on_send(nvt, buf, 2);
+  }
+  
+  nvt->subnegotiating = 0;
+  return TELNET_E_OK;
+}
+
+telnet_error telnet_nvt_subnegotiation(telnet_nvt* nvt, const telnet_byte option, const telnet_byte* data, const size_t length)
+{
+  if (!nvt)
+    return TELNET_E_BAD_NVT;
+  else if (nvt->subnegotiating)
+    return TELNET_E_SUBNEGOTIATING;
+  
+  if (nvt->callbacks.on_send)
+  {
+    telnet_nvt_start_subnegotiation(nvt, option);
+    if (telnet_nvt_text(nvt, data, length) == TELNET_E_ALLOC)
+      return TELNET_E_ALLOC;
+    telnet_nvt_end_subnegotiation(nvt);
+  }
+  
+  return TELNET_E_OK;
 }

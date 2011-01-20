@@ -2,6 +2,14 @@
 
 typedef unsigned char telnet_byte;
 
+typedef enum telnet_error {
+  TELNET_E_ALLOC = -3,
+  TELNET_E_SUBNEGOTIATING = -2,
+  TELNET_E_BAD_COMMAND = -1,
+  TELNET_E_BAD_NVT = 0,
+  TELNET_E_OK = 1,
+} telnet_error;
+
 typedef enum telnet_command
 {
   IAC_SE = 240,
@@ -75,22 +83,26 @@ typedef void (*telnet_send_callback)(telnet_nvt* nvt, const telnet_byte* data, s
 
 typedef struct telnet_callbacks
 {
-  telnet_recv_callback    on_recv;
-  telnet_send_callback    on_send;
+  telnet_recv_callback on_recv;
+  telnet_send_callback on_send;
 } telnet_callbacks;
 
 
 telnet_nvt* telnet_nvt_new();
 void telnet_nvt_delete(telnet_nvt* nvt);
 
-int telnet_nvt_get_callbacks(telnet_nvt* nvt, telnet_callbacks** callbacks);
+telnet_error telnet_nvt_get_callbacks(telnet_nvt* nvt, telnet_callbacks** callbacks);
 
-int telnet_nvt_set_userdata(telnet_nvt* nvt, void* udata);
-int telnet_nvt_get_userdata(telnet_nvt* nvt, void** udata);
+telnet_error telnet_nvt_set_userdata(telnet_nvt* nvt, void* udata);
+telnet_error telnet_nvt_get_userdata(telnet_nvt* nvt, void** udata);
 
-int telnet_nvt_recv(telnet_nvt* nvt, const telnet_byte* data, const size_t length);
+telnet_error telnet_nvt_recv(telnet_nvt* nvt, const telnet_byte* data, const size_t length, size_t* bytes_used);
 
-int telnet_nvt_text(telnet_nvt* nvt, const telnet_byte* data, const size_t length);
-int telnet_nvt_command(telnet_nvt* nvt, const telnet_command command);
-int telnet_nvt_option(telnet_nvt* nvt, const telnet_command command, const telnet_byte option);
-int telnet_nvt_subnegotiation(telnet_nvt* nvt, const telnet_byte option, const telnet_byte* data, const size_t length);
+telnet_error telnet_nvt_text(telnet_nvt* nvt, const telnet_byte* data, const size_t length);
+telnet_error telnet_nvt_command(telnet_nvt* nvt, const telnet_command command);
+telnet_error telnet_nvt_option(telnet_nvt* nvt, const telnet_command command, const telnet_byte option);
+telnet_error telnet_nvt_begin_subnegotiation(telnet_nvt* nvt, const telnet_byte option);
+telnet_error telnet_nvt_end_subnegotiation(telnet_nvt* nvt);
+
+// Shorthand for begin_subneg, text, end_subneg
+telnet_error telnet_nvt_subnegotiation(telnet_nvt* nvt, const telnet_byte option, const telnet_byte* data, const size_t length);
