@@ -146,6 +146,15 @@ telnet_error telnet_nvt_recv(telnet_nvt* nvt, const telnet_byte* data, const siz
 tr1:
 #line 6 "ext/anachronism/telnet_nvt.rl"
 	{( nvt->p)--;}
+#line 118 "ext/anachronism/telnet_nvt.rl"
+	{
+    if (nvt->callbacks.on_recv)
+    {
+      telnet_event ev;
+      EV_WARNING(ev, "Invalid \\r: not followed by \\n or \\0.", ( nvt->p)-data);
+      nvt->callbacks.on_recv(nvt, &ev);
+    }
+  }
 #line 64 "ext/anachronism/telnet_nvt.rl"
 	{
     if (nvt->callbacks.on_recv && nvt->buflen > 0)
@@ -154,15 +163,6 @@ tr1:
       EV_TEXT(ev, nvt->buf, nvt->buflen);
       nvt->callbacks.on_recv(nvt, &ev);
       nvt->buflen = 0;
-    }
-  }
-#line 118 "ext/anachronism/telnet_nvt.rl"
-	{
-    if (nvt->callbacks.on_recv)
-    {
-      telnet_event ev;
-      EV_WARNING(ev, "Invalid \\r: not followed by \\n or \\0.", ( nvt->p)-data);
-      nvt->callbacks.on_recv(nvt, &ev);
     }
   }
 	goto st7;
@@ -350,6 +350,15 @@ case 2:
 tr12:
 #line 6 "ext/anachronism/telnet_nvt.rl"
 	{( nvt->p)--;}
+#line 118 "ext/anachronism/telnet_nvt.rl"
+	{
+    if (nvt->callbacks.on_recv)
+    {
+      telnet_event ev;
+      EV_WARNING(ev, "Invalid \\r: not followed by \\n or \\0.", ( nvt->p)-data);
+      nvt->callbacks.on_recv(nvt, &ev);
+    }
+  }
 #line 64 "ext/anachronism/telnet_nvt.rl"
 	{
     if (nvt->callbacks.on_recv && nvt->buflen > 0)
@@ -358,15 +367,6 @@ tr12:
       EV_TEXT(ev, nvt->buf, nvt->buflen);
       nvt->callbacks.on_recv(nvt, &ev);
       nvt->buflen = 0;
-    }
-  }
-#line 118 "ext/anachronism/telnet_nvt.rl"
-	{
-    if (nvt->callbacks.on_recv)
-    {
-      telnet_event ev;
-      EV_WARNING(ev, "Invalid \\r: not followed by \\n or \\0.", ( nvt->p)-data);
-      nvt->callbacks.on_recv(nvt, &ev);
     }
   }
 	goto st3;

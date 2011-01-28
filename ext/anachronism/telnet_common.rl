@@ -49,7 +49,7 @@
   cr_seq = CR @char
              ( NUL
              | NL @char
-             | ^(NUL|NL) @fhold @flush_text @warning_cr
+             | ^(NUL|NL) @fhold @warning_cr @flush_text
              );
   
   ###

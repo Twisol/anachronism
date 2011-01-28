@@ -4,59 +4,22 @@
 
 #define STR2SYM(str) ID2SYM(rb_intern((str)))
 
-VALUE mAnachronism = Qnil;
+static VALUE g_iac2sym = Qnil;
+static VALUE g_sym2iac = Qnil;
 
+// 'symbol' must be a symbol or a number
 static telnet_byte symbol2iac(const VALUE symbol)
 {
-  telnet_byte iac = 0;
-  
-  if (symbol == STR2SYM("SE"))        iac = IAC_SE;
-  else if (symbol == STR2SYM("NOP"))  iac = IAC_NOP;
-  else if (symbol == STR2SYM("DM"))   iac = IAC_DM;
-  else if (symbol == STR2SYM("BRK"))  iac = IAC_BRK;
-  else if (symbol == STR2SYM("IP"))   iac = IAC_IP;
-  else if (symbol == STR2SYM("AO"))   iac = IAC_AO;
-  else if (symbol == STR2SYM("AYT"))  iac = IAC_AYT;
-  else if (symbol == STR2SYM("EC"))   iac = IAC_EC;
-  else if (symbol == STR2SYM("EL"))   iac = IAC_EL;
-  else if (symbol == STR2SYM("GA"))   iac = IAC_GA;
-  else if (symbol == STR2SYM("SB"))   iac = IAC_SB;
-  else if (symbol == STR2SYM("WILL")) iac = IAC_WILL;
-  else if (symbol == STR2SYM("WONT")) iac = IAC_WONT;
-  else if (symbol == STR2SYM("DO"))   iac = IAC_DO;
-  else if (symbol == STR2SYM("DONT")) iac = IAC_DONT;
-  else if (symbol == STR2SYM("IAC"))  iac = IAC_IAC;
-  else                                iac = FIX2INT(symbol);
-  
-  return iac;
+  VALUE result = rb_hash_lookup(g_sym2iac, symbol);
+  if (result == Qnil)
+    result = symbol;
+  return FIX2INT(result);
 }
 
 static VALUE iac2symbol(const telnet_byte command)
 {
-  VALUE symbol = Qnil;
-  
-  switch (command)
-  {
-    case IAC_SE:   symbol = STR2SYM("SE");    break;
-    case IAC_NOP:  symbol = STR2SYM("NOP");   break;
-    case IAC_DM:   symbol = STR2SYM("DM");    break;
-    case IAC_BRK:  symbol = STR2SYM("BRK");   break;
-    case IAC_IP:   symbol = STR2SYM("IP");    break;
-    case IAC_AO:   symbol = STR2SYM("AO");    break;
-    case IAC_AYT:  symbol = STR2SYM("AYT");   break;
-    case IAC_EC:   symbol = STR2SYM("EC");    break;
-    case IAC_EL:   symbol = STR2SYM("EL");    break;
-    case IAC_GA:   symbol = STR2SYM("GA");    break;
-    case IAC_SB:   symbol = STR2SYM("SB");    break;
-    case IAC_WILL: symbol = STR2SYM("WILL");  break;
-    case IAC_WONT: symbol = STR2SYM("WONT");  break;
-    case IAC_DO:   symbol = STR2SYM("DO");    break;
-    case IAC_DONT: symbol = STR2SYM("DONT");  break;
-    case IAC_IAC:  symbol = STR2SYM("IAC");   break;
-    default:       symbol = INT2FIX(command); break;
-  }
-  
-  return symbol;
+  VALUE iac = INT2FIX(command);
+  return rb_hash_lookup2(g_iac2sym, iac, iac);
 }
 
 static void on_recv(telnet_nvt* nvt, telnet_event* event)
@@ -103,8 +66,7 @@ static void on_send(telnet_nvt* nvt, const telnet_byte* data, size_t length)
   telnet_nvt_get_userdata(nvt, (void**)&self);
   
   VALUE handler = rb_iv_get(self, "@handler");
-  rb_funcall(handler, rb_intern("on_send"), 1,
-      rb_str_new(data, length));
+  rb_funcall(handler, rb_intern("on_send"), 1, rb_str_new(data, length));
 }
 
 
@@ -121,7 +83,7 @@ static VALUE parser_allocate(VALUE klass)
 {
   telnet_nvt* nvt = telnet_nvt_new();
   
-  VALUE object = Data_Wrap_Struct(klass, parser_mark, parser_free, nvt);
+  VALUE object = Data_Wrap_Struct(klass, NULL, parser_free, nvt);
   telnet_nvt_set_userdata(nvt, (void*)object);
   
   telnet_callbacks* callbacks = NULL;
@@ -164,7 +126,8 @@ static VALUE parser_send_text(VALUE self, VALUE data)
   size_t len = RSTRING_LEN(rb_str);
   
   // TODO: Handle TELNET_E_ALLOC error case
-  telnet_nvt_text(nvt, str, len);
+  if (telnet_nvt_text(nvt, str, len) == TELNET_E_ALLOC)
+    rb_raise(rb_eNoMemError, "Unable to allocate output buffer for outgoing Telnet data.");
   
   return Qnil;
 }
@@ -210,10 +173,34 @@ static VALUE parser_halt(VALUE self)
   return Qnil;
 }
 
+static void setup_iac_hash()
+{
+  const char* codes[] = {"SE",   "NOP", "DM",   "BRK",
+                         "IP",   "AO",  "AYT",  "EC",
+                         "EL",   "GA",  "SB",   "WILL",
+                         "WONT", "DO",  "DONT", "IAC",
+                        };
+  g_sym2iac = rb_hash_new();
+  g_iac2sym = rb_hash_new();
+  
+  VALUE sym = Qnil;
+  VALUE val = Qnil;
+  int i;
+  for (i = 0; i < 16; ++i)
+  {
+    sym = STR2SYM(codes[i]);
+    val = INT2FIX(i+240);
+    
+    rb_hash_aset(g_sym2iac, sym, val);
+    rb_hash_aset(g_iac2sym, val, sym);
+  }
+}
+
 void Init_anachronism()
 {
-  mAnachronism = rb_define_module("Anachronism");
+  setup_iac_hash();
   
+  VALUE mAnachronism = rb_define_module("Anachronism");
   VALUE cNVT = rb_define_class_under(mAnachronism, "NVT", rb_cObject);
   rb_define_alloc_func(cNVT, parser_allocate);
   rb_define_method(cNVT, "initialize", parser_initialize, 1);
