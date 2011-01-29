@@ -136,7 +136,7 @@ struct telnet_nvt
   write data;
 }%%
 
-telnet_nvt* telnet_nvt_new()
+telnet_nvt* telnet_new_nvt()
 {
   telnet_nvt* nvt = malloc(sizeof(telnet_nvt));
   if (nvt != NULL)
@@ -147,12 +147,12 @@ telnet_nvt* telnet_nvt_new()
   return nvt;
 }
 
-void telnet_nvt_delete(telnet_nvt* nvt)
+void telnet_free_nvt(telnet_nvt* nvt)
 {
   free(nvt);
 }
 
-telnet_error telnet_nvt_get_callbacks(telnet_nvt* nvt, telnet_callbacks** callbacks)
+telnet_error telnet_get_callbacks(telnet_nvt* nvt, telnet_callbacks** callbacks)
 {
   if (!nvt)
     return TELNET_E_BAD_NVT;
@@ -161,7 +161,7 @@ telnet_error telnet_nvt_get_callbacks(telnet_nvt* nvt, telnet_callbacks** callba
   return TELNET_E_OK;
 }
 
-telnet_error telnet_nvt_set_userdata(telnet_nvt* nvt, void* userdata)
+telnet_error telnet_set_userdata(telnet_nvt* nvt, void* userdata)
 {
   if (!nvt)
     return TELNET_E_BAD_NVT;
@@ -170,7 +170,7 @@ telnet_error telnet_nvt_set_userdata(telnet_nvt* nvt, void* userdata)
   return TELNET_E_OK;
 }
 
-telnet_error telnet_nvt_get_userdata(telnet_nvt* nvt, void** userdata)
+telnet_error telnet_get_userdata(telnet_nvt* nvt, void** userdata)
 {
   if (!nvt)
     return TELNET_E_BAD_NVT;
@@ -179,7 +179,7 @@ telnet_error telnet_nvt_get_userdata(telnet_nvt* nvt, void** userdata)
   return TELNET_E_OK;
 }
 
-telnet_error telnet_nvt_recv(telnet_nvt* nvt, const telnet_byte* data, const size_t length, size_t* bytes_used)
+telnet_error telnet_recv(telnet_nvt* nvt, const telnet_byte* data, const size_t length, size_t* bytes_used)
 {
   if (!nvt)
     return TELNET_E_BAD_NVT;
@@ -212,7 +212,7 @@ telnet_error telnet_nvt_recv(telnet_nvt* nvt, const telnet_byte* data, const siz
   return TELNET_E_OK;
 }
 
-telnet_error telnet_nvt_halt(telnet_nvt* nvt)
+telnet_error telnet_halt(telnet_nvt* nvt)
 {
   if (!nvt)
     return TELNET_E_BAD_NVT;
@@ -288,7 +288,7 @@ static size_t telnet_escape(const telnet_byte* data, size_t length, telnet_byte*
   return outlen;
 }
 
-telnet_error telnet_nvt_data(telnet_nvt* nvt, const telnet_byte* data, const size_t length)
+telnet_error telnet_send_data(telnet_nvt* nvt, const telnet_byte* data, const size_t length)
 {
   if (!nvt)
     return TELNET_E_BAD_NVT;
@@ -311,7 +311,7 @@ telnet_error telnet_nvt_data(telnet_nvt* nvt, const telnet_byte* data, const siz
   return TELNET_E_OK;
 }
 
-telnet_error telnet_nvt_command(telnet_nvt* nvt, const telnet_byte command)
+telnet_error telnet_send_command(telnet_nvt* nvt, const telnet_byte command)
 {
   if (!nvt)
     return TELNET_E_BAD_NVT;
@@ -329,7 +329,7 @@ telnet_error telnet_nvt_command(telnet_nvt* nvt, const telnet_byte command)
   return TELNET_E_OK;
 }
 
-telnet_error telnet_nvt_option(telnet_nvt* nvt, const telnet_byte command, const telnet_byte option)
+telnet_error telnet_send_option(telnet_nvt* nvt, const telnet_byte command, const telnet_byte option)
 {
   if (!nvt)
     return TELNET_E_BAD_NVT;
@@ -347,7 +347,7 @@ telnet_error telnet_nvt_option(telnet_nvt* nvt, const telnet_byte command, const
   return TELNET_E_OK;
 }
 
-telnet_error telnet_nvt_begin_subnegotiation(telnet_nvt* nvt, const telnet_byte option)
+telnet_error telnet_send_subnegotiation_start(telnet_nvt* nvt, const telnet_byte option)
 {
   if (!nvt)
     return TELNET_E_BAD_NVT;
@@ -364,7 +364,7 @@ telnet_error telnet_nvt_begin_subnegotiation(telnet_nvt* nvt, const telnet_byte 
   return TELNET_E_OK;
 }
 
-telnet_error telnet_nvt_end_subnegotiation(telnet_nvt* nvt)
+telnet_error telnet_send_subnegotiation_end(telnet_nvt* nvt)
 {
   if (!nvt)
     return TELNET_E_BAD_NVT;
@@ -381,7 +381,7 @@ telnet_error telnet_nvt_end_subnegotiation(telnet_nvt* nvt)
   return TELNET_E_OK;
 }
 
-telnet_error telnet_nvt_subnegotiation(telnet_nvt* nvt, const telnet_byte option, const telnet_byte* data, const size_t length)
+telnet_error telnet_send_subnegotiation(telnet_nvt* nvt, const telnet_byte option, const telnet_byte* data, const size_t length)
 {
   if (!nvt)
     return TELNET_E_BAD_NVT;

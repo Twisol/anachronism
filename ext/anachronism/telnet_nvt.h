@@ -104,21 +104,21 @@ typedef struct telnet_callbacks
   telnet_send_callback on_send;
 } telnet_callbacks;
 
-telnet_nvt* telnet_nvt_new();
-void telnet_nvt_delete(telnet_nvt* nvt);
+telnet_nvt* telnet_new_nvt();
+void telnet_free_nvt(telnet_nvt* nvt);
 
-telnet_error telnet_nvt_get_callbacks(telnet_nvt* nvt, telnet_callbacks** callbacks);
+telnet_error telnet_get_callbacks(telnet_nvt* nvt, telnet_callbacks** callbacks);
 
-telnet_error telnet_nvt_set_userdata(telnet_nvt* nvt, void* udata);
-telnet_error telnet_nvt_get_userdata(telnet_nvt* nvt, void** udata);
+telnet_error telnet_set_userdata(telnet_nvt* nvt, void* udata);
+telnet_error telnet_get_userdata(telnet_nvt* nvt, void** udata);
 
-telnet_error telnet_nvt_recv(telnet_nvt* nvt, const telnet_byte* data, const size_t length, size_t* bytes_used);
+telnet_error telnet_recv(telnet_nvt* nvt, const telnet_byte* data, const size_t length, size_t* bytes_used);
 
-telnet_error telnet_nvt_data(telnet_nvt* nvt, const telnet_byte* data, const size_t length);
-telnet_error telnet_nvt_command(telnet_nvt* nvt, const telnet_byte command);
-telnet_error telnet_nvt_option(telnet_nvt* nvt, const telnet_byte command, const telnet_byte option);
-telnet_error telnet_nvt_begin_subnegotiation(telnet_nvt* nvt, const telnet_byte option);
-telnet_error telnet_nvt_end_subnegotiation(telnet_nvt* nvt);
+telnet_error telnet_send_data(telnet_nvt* nvt, const telnet_byte* data, const size_t length);
+telnet_error telnet_send_command(telnet_nvt* nvt, const telnet_byte command);
+telnet_error telnet_send_option(telnet_nvt* nvt, const telnet_byte command, const telnet_byte option);
+telnet_error telnet_send_subnegotiation_start(telnet_nvt* nvt, const telnet_byte option);
+telnet_error telnet_send_subnegotiation_end(telnet_nvt* nvt);
 
-// Shorthand for begin_subneg, text, end_subneg
-telnet_error telnet_nvt_subnegotiation(telnet_nvt* nvt, const telnet_byte option, const telnet_byte* data, const size_t length);
+// Shorthand for subneg_start, data, subneg_end
+telnet_error telnet_send_subnegotiation(telnet_nvt* nvt, const telnet_byte option, const telnet_byte* data, const size_t length);

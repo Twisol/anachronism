@@ -25,7 +25,7 @@ static VALUE iac2symbol(const telnet_byte command)
 static void on_recv(telnet_nvt* nvt, telnet_event* event)
 {
   VALUE self = Qnil;
-  telnet_nvt_get_userdata(nvt, (void**)&self);
+  telnet_get_userdata(nvt, (void**)&self);
   VALUE handler = rb_iv_get(self, "@handler");
   
   VALUE hash = rb_hash_new();
@@ -63,7 +63,7 @@ static void on_recv(telnet_nvt* nvt, telnet_event* event)
 static void on_send(telnet_nvt* nvt, const telnet_byte* data, size_t length)
 {
   VALUE self = Qnil;
-  telnet_nvt_get_userdata(nvt, (void**)&self);
+  telnet_get_userdata(nvt, (void**)&self);
   
   VALUE handler = rb_iv_get(self, "@handler");
   rb_funcall(handler, rb_intern("on_send"), 1, rb_str_new(data, length));
@@ -76,18 +76,18 @@ static VALUE parser_mark(telnet_nvt* nvt)
 
 static VALUE parser_free(telnet_nvt* nvt)
 {
-  telnet_nvt_delete(nvt);
+  telnet_free_nvt(nvt);
 }
 
 static VALUE parser_allocate(VALUE klass)
 {
-  telnet_nvt* nvt = telnet_nvt_new();
+  telnet_nvt* nvt = telnet_new_nvt();
   
   VALUE object = Data_Wrap_Struct(klass, NULL, parser_free, nvt);
-  telnet_nvt_set_userdata(nvt, (void*)object);
+  telnet_set_userdata(nvt, (void*)object);
   
   telnet_callbacks* callbacks = NULL;
-  telnet_nvt_get_callbacks(nvt, &callbacks);
+  telnet_get_callbacks(nvt, &callbacks);
   callbacks->on_recv = &on_recv;
   callbacks->on_send = &on_send;
   
@@ -111,7 +111,7 @@ static VALUE parser_recv(VALUE self, VALUE data)
   size_t len = RSTRING_LEN(rb_str);
   
   size_t bytes_used;
-  telnet_nvt_recv(nvt, str, len, &bytes_used);
+  telnet_recv(nvt, str, len, &bytes_used);
   return rb_str_substr(rb_str, bytes_used, len-bytes_used);
 }
 
@@ -125,8 +125,8 @@ static VALUE parser_send_data(VALUE self, VALUE data)
   const telnet_byte* str = (const telnet_byte*)RSTRING_PTR(rb_str);
   size_t len = RSTRING_LEN(rb_str);
   
-  // TODO: Handle TELNET_E_ALLOC error case
-  if (telnet_nvt_data(nvt, str, len) == TELNET_E_ALLOC)
+  telnet_error status = telnet_send_data(nvt, str, len);
+  if (status == TELNET_E_ALLOC)
     rb_raise(rb_eNoMemError, "Unable to allocate output buffer for outgoing Telnet data.");
   
   return Qnil;
@@ -137,7 +137,7 @@ static VALUE parser_send_command(VALUE self, VALUE command)
   telnet_nvt* nvt = NULL;
   Data_Get_Struct(self, telnet_nvt, nvt);
   
-  telnet_nvt_command(nvt, symbol2iac(command));
+  telnet_send_command(nvt, symbol2iac(command));
   return Qnil;
 }
 
@@ -146,7 +146,7 @@ static VALUE parser_send_option(VALUE self, VALUE command, VALUE option)
   telnet_nvt* nvt = NULL;
   Data_Get_Struct(self, telnet_nvt, nvt);
   
-  telnet_nvt_option(nvt, symbol2iac(command), NUM2INT(option));
+  telnet_send_option(nvt, symbol2iac(command), NUM2INT(option));
   return Qnil;
 }
 
@@ -160,7 +160,7 @@ static VALUE parser_send_subnegotiation(VALUE self, VALUE option, VALUE data)
   const telnet_byte* str = (const telnet_byte*)RSTRING_PTR(rb_str);
   size_t len = RSTRING_LEN(rb_str);
   
-  telnet_nvt_subnegotiation(nvt, NUM2INT(option), str, len);
+  telnet_send_subnegotiation(nvt, NUM2INT(option), str, len);
   return Qnil;
 }
 
@@ -169,7 +169,7 @@ static VALUE parser_halt(VALUE self)
   telnet_nvt* nvt = NULL;
   Data_Get_Struct(self, telnet_nvt, nvt);
   
-  telnet_nvt_halt(nvt);
+  telnet_halt(nvt);
   return Qnil;
 }
 
@@ -196,7 +196,7 @@ static void setup_iac_hash()
   }
 }
 
-void Init_anachronism()
+void Init_libanachronism()
 {
   setup_iac_hash();
   
