@@ -5,8 +5,8 @@
 #define BASE_EV(ev, t) \
   (ev).type = TELNET_EV_##t
 
-#define EV_TEXT(ev, text, len) {\
-  BASE_EV(ev, TEXT);\
+#define EV_DATA(ev, text, len) {\
+  BASE_EV(ev, DATA);\
   (ev).text_event.data = (text);\
   (ev).text_event.length = (len);\
 }
@@ -65,19 +65,19 @@ struct telnet_nvt
     if (nvt->callbacks.on_recv && nvt->buflen > 0)
     {
       telnet_event ev;
-      EV_TEXT(ev, nvt->buf, nvt->buflen);
+      EV_DATA(ev, nvt->buf, nvt->buflen);
       nvt->callbacks.on_recv(nvt, &ev);
       nvt->buflen = 0;
     }
   }
   
   action char {
-    if (nvt->callbacks.on_recv)
+    if (nvt->callbacks.on_recv && nvt->buf != NULL)
       nvt->buf[nvt->buflen++] = fc;
   }
   
   action basic_command {
-    if (nvt->callbacks.on_recv)
+    if (nvt->callbacks.on_recv && nvt->buf != NULL)
     {
       telnet_event ev;
       EV_COMMAND(ev, fc);
@@ -89,7 +89,7 @@ struct telnet_nvt
     nvt->option_mark= fc;
   }
   action option_command {
-    if (nvt->callbacks.on_recv)
+    if (nvt->callbacks.on_recv && nvt->buf != NULL)
     {
       telnet_event ev;
       EV_OPTION(ev, nvt->option_mark, fc);
@@ -99,7 +99,7 @@ struct telnet_nvt
 
   action subneg_command {
     nvt->option_mark = fc;
-    if (nvt->callbacks.on_recv)
+    if (nvt->callbacks.on_recv && nvt->buf != NULL)
     {
       telnet_event ev;
       EV_SUBNEGOTIATION(ev, 1, nvt->option_mark);
@@ -107,7 +107,7 @@ struct telnet_nvt
     }
   }
   action subneg_command_end {
-    if (nvt->callbacks.on_recv)
+    if (nvt->callbacks.on_recv && nvt->buf != NULL)
     {
       telnet_event ev;
       EV_SUBNEGOTIATION(ev, 0, nvt->option_mark);
@@ -116,7 +116,7 @@ struct telnet_nvt
   }
 
   action warning_cr {
-    if (nvt->callbacks.on_recv)
+    if (nvt->callbacks.on_recv && nvt->buf != NULL)
     {
       telnet_event ev;
       EV_WARNING(ev, "Invalid \\r: not followed by \\n or \\0.", fpc-data);
@@ -124,7 +124,7 @@ struct telnet_nvt
     }
   }
   action warning_iac {
-    if (nvt->callbacks.on_recv)
+    if (nvt->callbacks.on_recv && nvt->buf != NULL)
     {
       telnet_event ev;
       EV_WARNING(ev, "IAC followed by invalid command.", fpc-data);
@@ -139,10 +139,11 @@ struct telnet_nvt
 telnet_nvt* telnet_nvt_new()
 {
   telnet_nvt* nvt = malloc(sizeof(telnet_nvt));
-  memset(nvt, 0, sizeof(*nvt));
-  
-  %% write init;
-  
+  if (nvt != NULL)
+  {
+    memset(nvt, 0, sizeof(*nvt));
+    %% write init;
+  }
   return nvt;
 }
 
@@ -223,21 +224,27 @@ telnet_error telnet_nvt_halt(telnet_nvt* nvt)
   return TELNET_E_OK;
 }
 
-telnet_error telnet_nvt_text(telnet_nvt* nvt, const telnet_byte* data, const size_t length)
+
+static int safe_concat(const telnet_byte* in, size_t inlen, telnet_byte* out, size_t outlen)
 {
-  if (!nvt)
-    return TELNET_E_BAD_NVT;
-  else if (!nvt->callbacks.on_send)
-    return TELNET_E_OK; // immediate success since they apparently don't want the data to go anywhere
+  // Copy as much as possible into the buffer.
+  memcpy(out, in, (outlen < inlen) ? outlen : inlen);
   
-  // Due to the nature of the protocol, the most any one byte can be encoded as is two bytes.
-  // Hence, the smallest buffer guaranteed to contain any input is double the length of the source.
-  telnet_byte* buf = malloc(length * 2 * sizeof(*buf));
-  if (!buf)
-    return TELNET_E_ALLOC;
-  size_t buflen = 0;
+  // true if everything could be copied, false otherwise
+  return outlen >= inlen;
+}
+
+// Escapes any special characters in data, writing the result data to out.
+// Returns -1 if not everything could be copied (and out is full).
+// Otherwise returns the length of the data in out.
+//
+// To avoid potential -1 return values, pass in an out buffer double the length of the data buffer.
+static size_t telnet_escape(const telnet_byte* data, size_t length, telnet_byte* out, size_t outsize)
+{
+  if (data == NULL || out == NULL)
+    return 0;
   
-  // Find the 'special' characters and escape them properly
+  size_t outlen = 0;
   size_t left = 0;
   size_t right = 0;
   const char* seq = NULL;
@@ -258,21 +265,45 @@ telnet_error telnet_nvt_text(telnet_nvt* nvt, const telnet_byte* data, const siz
         continue; // Move to the next character
     }
     
-    memcpy(buf+buflen, data+left, right-left);
-    buflen += right - left;
+    // Add any normal data that hasn't been added yet.
+    if (safe_concat(data+left, right-left, out+outlen, outsize-outlen) == 0)
+      return -1;
+    outlen += right - left;
     left = right + 1;
     
-    memcpy(buf+buflen, seq, 2);
-    buflen += 2;
+    // Add the escape sequence.
+    if (safe_concat(seq, 2, out+outlen, outsize-outlen) == 0)
+      return -1;
+    outlen += 2;
   }
   
+  // Add any leftover normal data.
   if (left < right)
   {
-    memcpy(buf+buflen, data+left, right-left);
-    buflen += right - left;
+    if (safe_concat(data+left, right-left, out+outlen, outsize-outlen) == 0)
+      return -1;
+    outlen += right - left;
   }
   
-  nvt->callbacks.on_send(nvt, buf, buflen);
+  return outlen;
+}
+
+telnet_error telnet_nvt_data(telnet_nvt* nvt, const telnet_byte* data, const size_t length)
+{
+  if (!nvt)
+    return TELNET_E_BAD_NVT;
+  else if (!nvt->callbacks.on_send)
+    return TELNET_E_OK; // immediate success since they apparently don't want the data to go anywhere
+  
+  // Due to the nature of the protocol, the most any one byte can be encoded as is two bytes.
+  // Hence, the smallest buffer guaranteed to contain any input is double the length of the source.
+  size_t bufsize = sizeof(telnet_byte) * length * 2;
+  telnet_byte* buf = malloc(bufsize);
+  if (!buf)
+    return TELNET_E_ALLOC;
+  
+  bufsize = telnet_escape(data, length, buf, bufsize);
+  nvt->callbacks.on_send(nvt, buf, bufsize);
   
   free(buf);
   buf = NULL;
@@ -280,25 +311,25 @@ telnet_error telnet_nvt_text(telnet_nvt* nvt, const telnet_byte* data, const siz
   return TELNET_E_OK;
 }
 
-telnet_error telnet_nvt_command(telnet_nvt* nvt, const telnet_command command)
+telnet_error telnet_nvt_command(telnet_nvt* nvt, const telnet_byte command)
 {
   if (!nvt)
     return TELNET_E_BAD_NVT;
   else if (nvt->subnegotiating)
     return TELNET_E_SUBNEGOTIATING;
-  else if ((command >= IAC_SB && command <= IAC_IAC) || command == IAC_SE) 
+  else if (command >= IAC_SB || command == IAC_SE) 
     return TELNET_E_BAD_COMMAND; // Invalid command
   
   if (nvt->callbacks.on_send)
   {
-    const telnet_byte buf[] = {IAC_IAC, (telnet_byte)command};
+    const telnet_byte buf[] = {IAC_IAC, command};
     nvt->callbacks.on_send(nvt, buf, 2);
   }
   
   return TELNET_E_OK;
 }
 
-telnet_error telnet_nvt_option(telnet_nvt* nvt, const telnet_command command, const telnet_byte option)
+telnet_error telnet_nvt_option(telnet_nvt* nvt, const telnet_byte command, const telnet_byte option)
 {
   if (!nvt)
     return TELNET_E_BAD_NVT;
@@ -309,7 +340,7 @@ telnet_error telnet_nvt_option(telnet_nvt* nvt, const telnet_command command, co
   
   if (nvt->callbacks.on_send)
   {
-    const telnet_byte buf[] = {IAC_IAC, (telnet_byte)command, option};
+    const telnet_byte buf[] = {IAC_IAC, command, option};
     nvt->callbacks.on_send(nvt, buf, 3);
   }
   
@@ -356,14 +387,28 @@ telnet_error telnet_nvt_subnegotiation(telnet_nvt* nvt, const telnet_byte option
     return TELNET_E_BAD_NVT;
   else if (nvt->subnegotiating)
     return TELNET_E_SUBNEGOTIATING;
+  else if (!nvt->callbacks.on_send)
+    return TELNET_E_OK;
   
-  if (nvt->callbacks.on_send)
-  {
-    telnet_nvt_start_subnegotiation(nvt, option);
-    if (telnet_nvt_text(nvt, data, length) == TELNET_E_ALLOC)
-      return TELNET_E_ALLOC;
-    telnet_nvt_end_subnegotiation(nvt);
-  }
+  // length*2 is the maximum buffer size needed for an escaped string.
+  // The extra five bytes are for the IAC, SB, <option>, IAC, and SE frame around the data.
+  size_t bufsize = (sizeof(telnet_byte) * length * 2) + 5;
+  telnet_byte* buf = malloc(bufsize);
+  if (!buf)
+    return TELNET_E_ALLOC;
+  
+  // Begin with IAC SB <option>
+  telnet_byte iac[] = {IAC_IAC, IAC_SB, option};
+  memcpy(buf, iac, 3);
+  
+  // Add the subnegotiation body
+  size_t escaped_length = telnet_escape(data, length, buf+3, bufsize-3) + 3;
+  
+  // End with IAC SE
+  iac[1] = IAC_SE;
+  memcpy(buf+escaped_length, iac, 2);
+  
+  nvt->callbacks.on_send(nvt, buf, escaped_length + 2);
   
   return TELNET_E_OK;
 }

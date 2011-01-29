@@ -32,8 +32,8 @@ static void on_recv(telnet_nvt* nvt, telnet_event* event)
   
   switch (event->type)
   {
-    case TELNET_EV_TEXT:
-      rb_hash_aset(hash, STR2SYM("type"), STR2SYM("text"));
+    case TELNET_EV_DATA:
+      rb_hash_aset(hash, STR2SYM("type"), STR2SYM("data"));
       rb_hash_aset(hash, STR2SYM("data"), rb_str_new(event->text_event.data, event->text_event.length));
       break;
     case TELNET_EV_COMMAND:
@@ -115,7 +115,7 @@ static VALUE parser_recv(VALUE self, VALUE data)
   return rb_str_substr(rb_str, bytes_used, len-bytes_used);
 }
 
-static VALUE parser_send_text(VALUE self, VALUE data)
+static VALUE parser_send_data(VALUE self, VALUE data)
 {
   telnet_nvt* nvt = NULL;
   Data_Get_Struct(self, telnet_nvt, nvt);
@@ -126,7 +126,7 @@ static VALUE parser_send_text(VALUE self, VALUE data)
   size_t len = RSTRING_LEN(rb_str);
   
   // TODO: Handle TELNET_E_ALLOC error case
-  if (telnet_nvt_text(nvt, str, len) == TELNET_E_ALLOC)
+  if (telnet_nvt_data(nvt, str, len) == TELNET_E_ALLOC)
     rb_raise(rb_eNoMemError, "Unable to allocate output buffer for outgoing Telnet data.");
   
   return Qnil;
@@ -205,7 +205,7 @@ void Init_anachronism()
   rb_define_alloc_func(cNVT, parser_allocate);
   rb_define_method(cNVT, "initialize", parser_initialize, 1);
   rb_define_method(cNVT, "recv", parser_recv, 1);
-  rb_define_method(cNVT, "send_text", parser_send_text, 1);
+  rb_define_method(cNVT, "send_data", parser_send_data, 1);
   rb_define_method(cNVT, "send_command", parser_send_command, 1);
   rb_define_method(cNVT, "send_option", parser_send_option, 2);
   rb_define_method(cNVT, "send_subnegotiation", parser_send_subnegotiation, 2);
