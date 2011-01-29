@@ -1,213 +1,694 @@
+
+#line 1 "ext/anachronism/anachronism.rl"
+#include <stdlib.h>
 #include <string.h>
-#include "ruby.h"
-#include "telnet_nvt.h"
+#include "anachronism.h"
 
-#define STR2SYM(str) ID2SYM(rb_intern((str)))
+#define BASE_EV(ev, t) \
+  (ev).type = TELNET_EV_##t
 
-static VALUE g_iac2sym = Qnil;
-static VALUE g_sym2iac = Qnil;
-
-// 'symbol' must be a symbol or a number
-static telnet_byte symbol2iac(const VALUE symbol)
-{
-  VALUE result = rb_hash_lookup(g_sym2iac, symbol);
-  if (result == Qnil)
-    result = symbol;
-  return FIX2INT(result);
+#define EV_DATA(ev, text, len) {\
+  BASE_EV(ev, DATA);\
+  (ev).text_event.data = (text);\
+  (ev).text_event.length = (len);\
 }
 
-static VALUE iac2symbol(const telnet_byte command)
-{
-  VALUE iac = INT2FIX(command);
-  return rb_hash_lookup2(g_iac2sym, iac, iac);
+#define EV_COMMAND(ev, cmd) {\
+  BASE_EV(ev, COMMAND);\
+  (ev).command_event.command = (cmd);\
 }
 
-static void on_recv(telnet_nvt* nvt, telnet_event* event)
+#define EV_OPTION(ev, cmd, opt) {\
+  BASE_EV(ev, OPTION);\
+  (ev).option_event.command = (cmd);\
+  (ev).option_event.option = (opt);\
+}
+
+#define EV_SUBNEGOTIATION(ev, act, opt) {\
+  BASE_EV(ev, SUBNEGOTIATION);\
+  (ev).subnegotiation_event.active = (act);\
+  (ev).subnegotiation_event.option = (opt);\
+}
+
+#define EV_WARNING(ev, msg, pos) {\
+  BASE_EV(ev, WARNING);\
+  (ev).warning_event.message = (msg);\
+  (ev).warning_event.position = (pos);\
+}
+
+
+struct telnet_nvt
 {
-  VALUE self = Qnil;
-  telnet_get_userdata(nvt, (void**)&self);
-  VALUE handler = rb_iv_get(self, "@handler");
+  int cs; /* current Ragel state */
+  const telnet_byte* p; /* current position */
+  const telnet_byte* pe; /* end of current packet */
+  const telnet_byte* eof; /* end-of-file marker */
   
-  VALUE hash = rb_hash_new();
+  telnet_byte option_mark; /* temporary storage for a command byte */
+  unsigned char options[256]; /* track the state of each subnegotiation option */
   
-  switch (event->type)
+  telnet_byte* buf; /* Buffer to build up a stretch of text in. */
+  size_t buflen; /* Length so far of the buffer. */
+  
+  telnet_callbacks callbacks;
+  void* userdata;
+  int subnegotiating;
+};
+
+
+#line 60 "ext/anachronism/anachronism.c"
+static const int telnet_parser_start = 7;
+static const int telnet_parser_first_final = 7;
+static const int telnet_parser_error = -1;
+
+static const int telnet_parser_en_main = 7;
+
+
+#line 137 "ext/anachronism/anachronism.rl"
+
+
+telnet_nvt* telnet_new_nvt()
+{
+  telnet_nvt* nvt = malloc(sizeof(telnet_nvt));
+  if (nvt != NULL)
   {
-    case TELNET_EV_DATA:
-      rb_hash_aset(hash, STR2SYM("type"), STR2SYM("data"));
-      rb_hash_aset(hash, STR2SYM("data"), rb_str_new(event->text_event.data, event->text_event.length));
-      break;
-    case TELNET_EV_COMMAND:
-      rb_hash_aset(hash, STR2SYM("type"), STR2SYM("command"));
-      rb_hash_aset(hash, STR2SYM("command"), iac2symbol(event->command_event.command));
-      break;
-    case TELNET_EV_OPTION:
-      rb_hash_aset(hash, STR2SYM("type"), STR2SYM("option"));
-      rb_hash_aset(hash, STR2SYM("command"), iac2symbol(event->option_event.command));
-      rb_hash_aset(hash, STR2SYM("option"), INT2FIX(event->option_event.option));
-      break;
-    case TELNET_EV_SUBNEGOTIATION:
-      rb_hash_aset(hash, STR2SYM("type"), STR2SYM("subnegotiation"));
-      rb_hash_aset(hash, STR2SYM("active"), event->subnegotiation_event.active ? Qtrue : Qfalse);
-      rb_hash_aset(hash, STR2SYM("option"), INT2FIX(event->subnegotiation_event.option));
-      break;
-    case TELNET_EV_WARNING:
-      rb_hash_aset(hash, STR2SYM("type"), STR2SYM("warning"));
-      rb_hash_aset(hash, STR2SYM("message"), rb_str_new_cstr(event->warning_event.message));
-      rb_hash_aset(hash, STR2SYM("position"), INT2NUM(event->warning_event.position));
-      break;
-  }
-  
-  rb_funcall(handler, rb_intern("on_recv"), 1, hash);
-}
-
-static void on_send(telnet_nvt* nvt, const telnet_byte* data, size_t length)
-{
-  VALUE self = Qnil;
-  telnet_get_userdata(nvt, (void**)&self);
-  
-  VALUE handler = rb_iv_get(self, "@handler");
-  rb_funcall(handler, rb_intern("on_send"), 1, rb_str_new(data, length));
-}
-
-
-static VALUE parser_mark(telnet_nvt* nvt)
-{
-}
-
-static VALUE parser_free(telnet_nvt* nvt)
-{
-  telnet_free_nvt(nvt);
-}
-
-static VALUE parser_allocate(VALUE klass)
-{
-  telnet_nvt* nvt = telnet_new_nvt();
-  
-  VALUE object = Data_Wrap_Struct(klass, NULL, parser_free, nvt);
-  telnet_set_userdata(nvt, (void*)object);
-  
-  telnet_callbacks* callbacks = NULL;
-  telnet_get_callbacks(nvt, &callbacks);
-  callbacks->on_recv = &on_recv;
-  callbacks->on_send = &on_send;
-  
-  return object;
-}
-
-static VALUE parser_initialize(VALUE self, VALUE callbacks)
-{
-  rb_iv_set(self, "@handler", callbacks);
-  return Qnil;
-}
-
-static VALUE parser_recv(VALUE self, VALUE data)
-{
-  telnet_nvt* nvt = NULL;
-  Data_Get_Struct(self, telnet_nvt, nvt);
-  
-  // Prepare the data as a string
-  VALUE rb_str = StringValue(data);
-  const telnet_byte* str = (const telnet_byte*)RSTRING_PTR(rb_str);
-  size_t len = RSTRING_LEN(rb_str);
-  
-  size_t bytes_used;
-  telnet_recv(nvt, str, len, &bytes_used);
-  return rb_str_substr(rb_str, bytes_used, len-bytes_used);
-}
-
-static VALUE parser_send_data(VALUE self, VALUE data)
-{
-  telnet_nvt* nvt = NULL;
-  Data_Get_Struct(self, telnet_nvt, nvt);
-  
-  // Prepare the data as a string
-  VALUE rb_str = StringValue(data);
-  const telnet_byte* str = (const telnet_byte*)RSTRING_PTR(rb_str);
-  size_t len = RSTRING_LEN(rb_str);
-  
-  telnet_error status = telnet_send_data(nvt, str, len);
-  if (status == TELNET_E_ALLOC)
-    rb_raise(rb_eNoMemError, "Unable to allocate output buffer for outgoing Telnet data.");
-  
-  return Qnil;
-}
-
-static VALUE parser_send_command(VALUE self, VALUE command)
-{
-  telnet_nvt* nvt = NULL;
-  Data_Get_Struct(self, telnet_nvt, nvt);
-  
-  telnet_send_command(nvt, symbol2iac(command));
-  return Qnil;
-}
-
-static VALUE parser_send_option(VALUE self, VALUE command, VALUE option)
-{
-  telnet_nvt* nvt = NULL;
-  Data_Get_Struct(self, telnet_nvt, nvt);
-  
-  telnet_send_option(nvt, symbol2iac(command), NUM2INT(option));
-  return Qnil;
-}
-
-static VALUE parser_send_subnegotiation(VALUE self, VALUE option, VALUE data)
-{
-  telnet_nvt* nvt = NULL;
-  Data_Get_Struct(self, telnet_nvt, nvt);
-  
-  // Prepare the data as a string
-  VALUE rb_str = StringValue(data);
-  const telnet_byte* str = (const telnet_byte*)RSTRING_PTR(rb_str);
-  size_t len = RSTRING_LEN(rb_str);
-  
-  telnet_send_subnegotiation(nvt, NUM2INT(option), str, len);
-  return Qnil;
-}
-
-static VALUE parser_halt(VALUE self)
-{
-  telnet_nvt* nvt = NULL;
-  Data_Get_Struct(self, telnet_nvt, nvt);
-  
-  telnet_halt(nvt);
-  return Qnil;
-}
-
-static void setup_iac_hash()
-{
-  const char* codes[] = {"SE",   "NOP", "DM",   "BRK",
-                         "IP",   "AO",  "AYT",  "EC",
-                         "EL",   "GA",  "SB",   "WILL",
-                         "WONT", "DO",  "DONT", "IAC",
-                        };
-  g_sym2iac = rb_hash_new();
-  g_iac2sym = rb_hash_new();
-  
-  VALUE sym = Qnil;
-  VALUE val = Qnil;
-  int i;
-  for (i = 0; i < 16; ++i)
-  {
-    sym = STR2SYM(codes[i]);
-    val = INT2FIX(i+240);
+    memset(nvt, 0, sizeof(*nvt));
     
-    rb_hash_aset(g_sym2iac, sym, val);
-    rb_hash_aset(g_iac2sym, val, sym);
+#line 78 "ext/anachronism/anachronism.c"
+	{
+	 nvt->cs = telnet_parser_start;
+	}
+
+#line 146 "ext/anachronism/anachronism.rl"
   }
+  return nvt;
 }
 
-void Init_libanachronism()
+void telnet_free_nvt(telnet_nvt* nvt)
 {
-  setup_iac_hash();
+  free(nvt);
+}
+
+telnet_error telnet_get_callbacks(telnet_nvt* nvt, telnet_callbacks** callbacks)
+{
+  if (!nvt)
+    return TELNET_E_BAD_NVT;
   
-  VALUE mAnachronism = rb_define_module("Anachronism");
-  VALUE cNVT = rb_define_class_under(mAnachronism, "NVT", rb_cObject);
-  rb_define_alloc_func(cNVT, parser_allocate);
-  rb_define_method(cNVT, "initialize", parser_initialize, 1);
-  rb_define_method(cNVT, "recv", parser_recv, 1);
-  rb_define_method(cNVT, "send_data", parser_send_data, 1);
-  rb_define_method(cNVT, "send_command", parser_send_command, 1);
-  rb_define_method(cNVT, "send_option", parser_send_option, 2);
-  rb_define_method(cNVT, "send_subnegotiation", parser_send_subnegotiation, 2);
-  rb_define_method(cNVT, "halt", parser_halt, 0);
+  *callbacks = &nvt->callbacks;
+  return TELNET_E_OK;
+}
+
+telnet_error telnet_set_userdata(telnet_nvt* nvt, void* userdata)
+{
+  if (!nvt)
+    return TELNET_E_BAD_NVT;
+  
+  nvt->userdata = userdata;
+  return TELNET_E_OK;
+}
+
+telnet_error telnet_get_userdata(telnet_nvt* nvt, void** userdata)
+{
+  if (!nvt)
+    return TELNET_E_BAD_NVT;
+  
+  *userdata = nvt->userdata;
+  return TELNET_E_OK;
+}
+
+telnet_error telnet_recv(telnet_nvt* nvt, const telnet_byte* data, const size_t length, size_t* bytes_used)
+{
+  if (!nvt)
+    return TELNET_E_BAD_NVT;
+  
+  // Only bother saving text if it'll be used
+  if (nvt->callbacks.on_recv)
+  {
+    // Because of how the parser translates data, a run of text is guaranteed to
+    // be at most 'length' characters long. In practice it's usually less, due to
+    // escaped characters (IAC IAC -> IAC) and text separated by commands.
+    nvt->buf = malloc(length * sizeof(*nvt->buf));
+    if (!nvt->buf)
+      return -1; // unable to allocate a buffer
+    nvt->buflen = 0;
+  }
+  
+  nvt->p = data;
+  nvt->pe = data + length;
+  nvt->eof = nvt->pe;
+  
+  
+#line 142 "ext/anachronism/anachronism.c"
+	{
+	if ( ( nvt->p) == ( nvt->pe) )
+		goto _test_eof;
+	switch (  nvt->cs )
+	{
+tr1:
+#line 6 "ext/anachronism/anachronism.rl"
+	{( nvt->p)--;}
+#line 118 "ext/anachronism/anachronism.rl"
+	{
+    if (nvt->callbacks.on_recv && nvt->buf != NULL)
+    {
+      telnet_event ev;
+      EV_WARNING(ev, "Invalid \\r: not followed by \\n or \\0.", ( nvt->p)-data);
+      nvt->callbacks.on_recv(nvt, &ev);
+    }
+  }
+#line 64 "ext/anachronism/anachronism.rl"
+	{
+    if (nvt->callbacks.on_recv && nvt->buflen > 0)
+    {
+      telnet_event ev;
+      EV_DATA(ev, nvt->buf, nvt->buflen);
+      nvt->callbacks.on_recv(nvt, &ev);
+      nvt->buflen = 0;
+    }
+  }
+	goto st7;
+tr2:
+#line 74 "ext/anachronism/anachronism.rl"
+	{
+    if (nvt->callbacks.on_recv && nvt->buf != NULL)
+      nvt->buf[nvt->buflen++] = (*( nvt->p));
+  }
+	goto st7;
+tr3:
+#line 64 "ext/anachronism/anachronism.rl"
+	{
+    if (nvt->callbacks.on_recv && nvt->buflen > 0)
+    {
+      telnet_event ev;
+      EV_DATA(ev, nvt->buf, nvt->buflen);
+      nvt->callbacks.on_recv(nvt, &ev);
+      nvt->buflen = 0;
+    }
+  }
+#line 126 "ext/anachronism/anachronism.rl"
+	{
+    if (nvt->callbacks.on_recv && nvt->buf != NULL)
+    {
+      telnet_event ev;
+      EV_WARNING(ev, "IAC followed by invalid command.", ( nvt->p)-data);
+      nvt->callbacks.on_recv(nvt, &ev);
+    }
+  }
+#line 79 "ext/anachronism/anachronism.rl"
+	{
+    if (nvt->callbacks.on_recv && nvt->buf != NULL)
+    {
+      telnet_event ev;
+      EV_COMMAND(ev, (*( nvt->p)));
+      nvt->callbacks.on_recv(nvt, &ev);
+    }
+  }
+	goto st7;
+tr4:
+#line 64 "ext/anachronism/anachronism.rl"
+	{
+    if (nvt->callbacks.on_recv && nvt->buflen > 0)
+    {
+      telnet_event ev;
+      EV_DATA(ev, nvt->buf, nvt->buflen);
+      nvt->callbacks.on_recv(nvt, &ev);
+      nvt->buflen = 0;
+    }
+  }
+#line 79 "ext/anachronism/anachronism.rl"
+	{
+    if (nvt->callbacks.on_recv && nvt->buf != NULL)
+    {
+      telnet_event ev;
+      EV_COMMAND(ev, (*( nvt->p)));
+      nvt->callbacks.on_recv(nvt, &ev);
+    }
+  }
+	goto st7;
+tr13:
+#line 64 "ext/anachronism/anachronism.rl"
+	{
+    if (nvt->callbacks.on_recv && nvt->buflen > 0)
+    {
+      telnet_event ev;
+      EV_DATA(ev, nvt->buf, nvt->buflen);
+      nvt->callbacks.on_recv(nvt, &ev);
+      nvt->buflen = 0;
+    }
+  }
+#line 6 "ext/anachronism/anachronism.rl"
+	{( nvt->p)--;}
+#line 126 "ext/anachronism/anachronism.rl"
+	{
+    if (nvt->callbacks.on_recv && nvt->buf != NULL)
+    {
+      telnet_event ev;
+      EV_WARNING(ev, "IAC followed by invalid command.", ( nvt->p)-data);
+      nvt->callbacks.on_recv(nvt, &ev);
+    }
+  }
+#line 109 "ext/anachronism/anachronism.rl"
+	{
+    if (nvt->callbacks.on_recv && nvt->buf != NULL)
+    {
+      telnet_event ev;
+      EV_SUBNEGOTIATION(ev, 0, nvt->option_mark);
+      nvt->callbacks.on_recv(nvt, &ev);
+    }
+  }
+	goto st7;
+tr14:
+#line 64 "ext/anachronism/anachronism.rl"
+	{
+    if (nvt->callbacks.on_recv && nvt->buflen > 0)
+    {
+      telnet_event ev;
+      EV_DATA(ev, nvt->buf, nvt->buflen);
+      nvt->callbacks.on_recv(nvt, &ev);
+      nvt->buflen = 0;
+    }
+  }
+#line 109 "ext/anachronism/anachronism.rl"
+	{
+    if (nvt->callbacks.on_recv && nvt->buf != NULL)
+    {
+      telnet_event ev;
+      EV_SUBNEGOTIATION(ev, 0, nvt->option_mark);
+      nvt->callbacks.on_recv(nvt, &ev);
+    }
+  }
+	goto st7;
+tr15:
+#line 91 "ext/anachronism/anachronism.rl"
+	{
+    if (nvt->callbacks.on_recv && nvt->buf != NULL)
+    {
+      telnet_event ev;
+      EV_OPTION(ev, nvt->option_mark, (*( nvt->p)));
+      nvt->callbacks.on_recv(nvt, &ev);
+    }
+  }
+	goto st7;
+st7:
+	if ( ++( nvt->p) == ( nvt->pe) )
+		goto _test_eof7;
+case 7:
+#line 297 "ext/anachronism/anachronism.c"
+	switch( (*( nvt->p)) ) {
+		case 13u: goto tr16;
+		case 255u: goto st1;
+	}
+	goto tr2;
+tr16:
+#line 74 "ext/anachronism/anachronism.rl"
+	{
+    if (nvt->callbacks.on_recv && nvt->buf != NULL)
+      nvt->buf[nvt->buflen++] = (*( nvt->p));
+  }
+	goto st0;
+st0:
+	if ( ++( nvt->p) == ( nvt->pe) )
+		goto _test_eof0;
+case 0:
+#line 314 "ext/anachronism/anachronism.c"
+	switch( (*( nvt->p)) ) {
+		case 0u: goto st7;
+		case 10u: goto tr2;
+	}
+	goto tr1;
+st1:
+	if ( ++( nvt->p) == ( nvt->pe) )
+		goto _test_eof1;
+case 1:
+	switch( (*( nvt->p)) ) {
+		case 250u: goto tr5;
+		case 255u: goto tr2;
+	}
+	if ( (*( nvt->p)) > 249u ) {
+		if ( 251u <= (*( nvt->p)) && (*( nvt->p)) <= 254u )
+			goto tr6;
+	} else if ( (*( nvt->p)) >= 241u )
+		goto tr4;
+	goto tr3;
+tr5:
+#line 64 "ext/anachronism/anachronism.rl"
+	{
+    if (nvt->callbacks.on_recv && nvt->buflen > 0)
+    {
+      telnet_event ev;
+      EV_DATA(ev, nvt->buf, nvt->buflen);
+      nvt->callbacks.on_recv(nvt, &ev);
+      nvt->buflen = 0;
+    }
+  }
+	goto st2;
+st2:
+	if ( ++( nvt->p) == ( nvt->pe) )
+		goto _test_eof2;
+case 2:
+#line 350 "ext/anachronism/anachronism.c"
+	goto tr7;
+tr12:
+#line 6 "ext/anachronism/anachronism.rl"
+	{( nvt->p)--;}
+#line 118 "ext/anachronism/anachronism.rl"
+	{
+    if (nvt->callbacks.on_recv && nvt->buf != NULL)
+    {
+      telnet_event ev;
+      EV_WARNING(ev, "Invalid \\r: not followed by \\n or \\0.", ( nvt->p)-data);
+      nvt->callbacks.on_recv(nvt, &ev);
+    }
+  }
+#line 64 "ext/anachronism/anachronism.rl"
+	{
+    if (nvt->callbacks.on_recv && nvt->buflen > 0)
+    {
+      telnet_event ev;
+      EV_DATA(ev, nvt->buf, nvt->buflen);
+      nvt->callbacks.on_recv(nvt, &ev);
+      nvt->buflen = 0;
+    }
+  }
+	goto st3;
+tr8:
+#line 74 "ext/anachronism/anachronism.rl"
+	{
+    if (nvt->callbacks.on_recv && nvt->buf != NULL)
+      nvt->buf[nvt->buflen++] = (*( nvt->p));
+  }
+	goto st3;
+tr7:
+#line 100 "ext/anachronism/anachronism.rl"
+	{
+    nvt->option_mark = (*( nvt->p));
+    if (nvt->callbacks.on_recv && nvt->buf != NULL)
+    {
+      telnet_event ev;
+      EV_SUBNEGOTIATION(ev, 1, nvt->option_mark);
+      nvt->callbacks.on_recv(nvt, &ev);
+    }
+  }
+	goto st3;
+st3:
+	if ( ++( nvt->p) == ( nvt->pe) )
+		goto _test_eof3;
+case 3:
+#line 398 "ext/anachronism/anachronism.c"
+	switch( (*( nvt->p)) ) {
+		case 13u: goto tr9;
+		case 255u: goto st5;
+	}
+	goto tr8;
+tr9:
+#line 74 "ext/anachronism/anachronism.rl"
+	{
+    if (nvt->callbacks.on_recv && nvt->buf != NULL)
+      nvt->buf[nvt->buflen++] = (*( nvt->p));
+  }
+	goto st4;
+st4:
+	if ( ++( nvt->p) == ( nvt->pe) )
+		goto _test_eof4;
+case 4:
+#line 415 "ext/anachronism/anachronism.c"
+	switch( (*( nvt->p)) ) {
+		case 0u: goto st3;
+		case 10u: goto tr8;
+	}
+	goto tr12;
+st5:
+	if ( ++( nvt->p) == ( nvt->pe) )
+		goto _test_eof5;
+case 5:
+	switch( (*( nvt->p)) ) {
+		case 240u: goto tr14;
+		case 255u: goto tr8;
+	}
+	goto tr13;
+tr6:
+#line 64 "ext/anachronism/anachronism.rl"
+	{
+    if (nvt->callbacks.on_recv && nvt->buflen > 0)
+    {
+      telnet_event ev;
+      EV_DATA(ev, nvt->buf, nvt->buflen);
+      nvt->callbacks.on_recv(nvt, &ev);
+      nvt->buflen = 0;
+    }
+  }
+#line 88 "ext/anachronism/anachronism.rl"
+	{
+    nvt->option_mark= (*( nvt->p));
+  }
+	goto st6;
+st6:
+	if ( ++( nvt->p) == ( nvt->pe) )
+		goto _test_eof6;
+case 6:
+#line 450 "ext/anachronism/anachronism.c"
+	goto tr15;
+	}
+	_test_eof7:  nvt->cs = 7; goto _test_eof; 
+	_test_eof0:  nvt->cs = 0; goto _test_eof; 
+	_test_eof1:  nvt->cs = 1; goto _test_eof; 
+	_test_eof2:  nvt->cs = 2; goto _test_eof; 
+	_test_eof3:  nvt->cs = 3; goto _test_eof; 
+	_test_eof4:  nvt->cs = 4; goto _test_eof; 
+	_test_eof5:  nvt->cs = 5; goto _test_eof; 
+	_test_eof6:  nvt->cs = 6; goto _test_eof; 
+
+	_test_eof: {}
+	if ( ( nvt->p) == ( nvt->eof) )
+	{
+	switch (  nvt->cs ) {
+	case 7: 
+#line 64 "ext/anachronism/anachronism.rl"
+	{
+    if (nvt->callbacks.on_recv && nvt->buflen > 0)
+    {
+      telnet_event ev;
+      EV_DATA(ev, nvt->buf, nvt->buflen);
+      nvt->callbacks.on_recv(nvt, &ev);
+      nvt->buflen = 0;
+    }
+  }
+	break;
+#line 478 "ext/anachronism/anachronism.c"
+	}
+	}
+
+	}
+
+#line 204 "ext/anachronism/anachronism.rl"
+  
+  if (bytes_used != NULL)
+    *bytes_used = nvt->p - data;
+  
+  free(nvt->buf);
+  nvt->buf = NULL;
+  nvt->p = nvt->pe = nvt->eof = NULL;
+  
+  return TELNET_E_OK;
+}
+
+telnet_error telnet_halt(telnet_nvt* nvt)
+{
+  if (!nvt)
+    return TELNET_E_BAD_NVT;
+  
+  // Force the parser to stop where it's at.
+  if (nvt->p)
+    nvt->eof = nvt->pe = nvt->p + 1;
+  
+  return TELNET_E_OK;
+}
+
+
+static int safe_concat(const telnet_byte* in, size_t inlen, telnet_byte* out, size_t outlen)
+{
+  // Copy as much as possible into the buffer.
+  memcpy(out, in, (outlen < inlen) ? outlen : inlen);
+  
+  // true if everything could be copied, false otherwise
+  return outlen >= inlen;
+}
+
+// Escapes any special characters in data, writing the result data to out.
+// Returns -1 if not everything could be copied (and out is full).
+// Otherwise returns the length of the data in out.
+//
+// To avoid potential -1 return values, pass in an out buffer double the length of the data buffer.
+static size_t telnet_escape(const telnet_byte* data, size_t length, telnet_byte* out, size_t outsize)
+{
+  if (data == NULL || out == NULL)
+    return 0;
+  
+  size_t outlen = 0;
+  size_t left = 0;
+  size_t right = 0;
+  const char* seq = NULL;
+  for (; right < length; ++right)
+  {
+    switch (data[right])
+    {
+      case '\r':
+        seq = "\r\0";
+        break;
+      case '\n':
+        seq = "\r\n";
+        break;
+      case IAC_IAC:
+        seq = "\xFF\xFF";
+        break;
+      default:
+        continue; // Move to the next character
+    }
+    
+    // Add any normal data that hasn't been added yet.
+    if (safe_concat(data+left, right-left, out+outlen, outsize-outlen) == 0)
+      return -1;
+    outlen += right - left;
+    left = right + 1;
+    
+    // Add the escape sequence.
+    if (safe_concat(seq, 2, out+outlen, outsize-outlen) == 0)
+      return -1;
+    outlen += 2;
+  }
+  
+  // Add any leftover normal data.
+  if (left < right)
+  {
+    if (safe_concat(data+left, right-left, out+outlen, outsize-outlen) == 0)
+      return -1;
+    outlen += right - left;
+  }
+  
+  return outlen;
+}
+
+telnet_error telnet_send_data(telnet_nvt* nvt, const telnet_byte* data, const size_t length)
+{
+  if (!nvt)
+    return TELNET_E_BAD_NVT;
+  else if (!nvt->callbacks.on_send)
+    return TELNET_E_OK; // immediate success since they apparently don't want the data to go anywhere
+  
+  // Due to the nature of the protocol, the most any one byte can be encoded as is two bytes.
+  // Hence, the smallest buffer guaranteed to contain any input is double the length of the source.
+  size_t bufsize = sizeof(telnet_byte) * length * 2;
+  telnet_byte* buf = malloc(bufsize);
+  if (!buf)
+    return TELNET_E_ALLOC;
+  
+  bufsize = telnet_escape(data, length, buf, bufsize);
+  nvt->callbacks.on_send(nvt, buf, bufsize);
+  
+  free(buf);
+  buf = NULL;
+  
+  return TELNET_E_OK;
+}
+
+telnet_error telnet_send_command(telnet_nvt* nvt, const telnet_byte command)
+{
+  if (!nvt)
+    return TELNET_E_BAD_NVT;
+  else if (nvt->subnegotiating)
+    return TELNET_E_SUBNEGOTIATING;
+  else if (command >= IAC_SB || command == IAC_SE) 
+    return TELNET_E_BAD_COMMAND; // Invalid command
+  
+  if (nvt->callbacks.on_send)
+  {
+    const telnet_byte buf[] = {IAC_IAC, command};
+    nvt->callbacks.on_send(nvt, buf, 2);
+  }
+  
+  return TELNET_E_OK;
+}
+
+telnet_error telnet_send_option(telnet_nvt* nvt, const telnet_byte command, const telnet_byte option)
+{
+  if (!nvt)
+    return TELNET_E_BAD_NVT;
+  else if (nvt->subnegotiating)
+    return TELNET_E_SUBNEGOTIATING;
+  else if (command < IAC_WILL || command > IAC_DONT)
+    return TELNET_E_BAD_COMMAND; // Invalid option command
+  
+  if (nvt->callbacks.on_send)
+  {
+    const telnet_byte buf[] = {IAC_IAC, command, option};
+    nvt->callbacks.on_send(nvt, buf, 3);
+  }
+  
+  return TELNET_E_OK;
+}
+
+telnet_error telnet_send_subnegotiation_start(telnet_nvt* nvt, const telnet_byte option)
+{
+  if (!nvt)
+    return TELNET_E_BAD_NVT;
+  else if (nvt->subnegotiating)
+    return TELNET_E_SUBNEGOTIATING;
+  
+  if (nvt->callbacks.on_send)
+  {
+    const telnet_byte buf[] = {IAC_IAC, IAC_SB, option};
+    nvt->callbacks.on_send(nvt, buf, 3);
+  }
+
+  nvt->subnegotiating = 1;
+  return TELNET_E_OK;
+}
+
+telnet_error telnet_send_subnegotiation_end(telnet_nvt* nvt)
+{
+  if (!nvt)
+    return TELNET_E_BAD_NVT;
+  else if (!nvt->subnegotiating)
+    return TELNET_E_SUBNEGOTIATING;
+  
+  if (nvt->callbacks.on_send)
+  {
+    static const telnet_byte buf[] = {IAC_IAC, IAC_SE};
+    nvt->callbacks.on_send(nvt, buf, 2);
+  }
+  
+  nvt->subnegotiating = 0;
+  return TELNET_E_OK;
+}
+
+telnet_error telnet_send_subnegotiation(telnet_nvt* nvt, const telnet_byte option, const telnet_byte* data, const size_t length)
+{
+  if (!nvt)
+    return TELNET_E_BAD_NVT;
+  else if (nvt->subnegotiating)
+    return TELNET_E_SUBNEGOTIATING;
+  else if (!nvt->callbacks.on_send)
+    return TELNET_E_OK;
+  
+  // length*2 is the maximum buffer size needed for an escaped string.
+  // The extra five bytes are for the IAC, SB, <option>, IAC, and SE frame around the data.
+  size_t bufsize = (sizeof(telnet_byte) * length * 2) + 5;
+  telnet_byte* buf = malloc(bufsize);
+  if (!buf)
+    return TELNET_E_ALLOC;
+  
+  // Begin with IAC SB <option>
+  telnet_byte iac[] = {IAC_IAC, IAC_SB, option};
+  memcpy(buf, iac, 3);
+  
+  // Add the subnegotiation body
+  size_t escaped_length = telnet_escape(data, length, buf+3, bufsize-3) + 3;
+  
+  // End with IAC SE
+  iac[1] = IAC_SE;
+  memcpy(buf+escaped_length, iac, 2);
+  
+  nvt->callbacks.on_send(nvt, buf, escaped_length + 2);
+  
+  return TELNET_E_OK;
 }

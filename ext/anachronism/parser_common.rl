@@ -1,5 +1,5 @@
 %%{
-  machine telnet_nvt_common;
+  machine telnet_parser_common;
   alphtype unsigned char;
   
   # Shorthand for tidiness.
