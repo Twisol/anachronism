@@ -7,3 +7,5 @@ ext/anachronism/Makefile
 
 .bundle/**
 .project
+src/*.a
+src/*.so*
