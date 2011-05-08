@@ -3,35 +3,35 @@
 #include "anachronism.h"
 
 #define BASE_EV(ev, t) \
-  (ev).type = TELNET_EV_##t
+  (ev).SUPER_.type = TELNET_EV_##t
 
 #define EV_DATA(ev, text, len) {\
   BASE_EV(ev, DATA);\
-  (ev).text_event.data = (text);\
-  (ev).text_event.length = (len);\
+  (ev).data = (text);\
+  (ev).length = (len);\
 }
 
 #define EV_COMMAND(ev, cmd) {\
   BASE_EV(ev, COMMAND);\
-  (ev).command_event.command = (cmd);\
+  (ev).command = (cmd);\
 }
 
 #define EV_OPTION(ev, cmd, opt) {\
   BASE_EV(ev, OPTION);\
-  (ev).option_event.command = (cmd);\
-  (ev).option_event.option = (opt);\
+  (ev).command = (cmd);\
+  (ev).option = (opt);\
 }
 
 #define EV_SUBNEGOTIATION(ev, act, opt) {\
   BASE_EV(ev, SUBNEGOTIATION);\
-  (ev).subnegotiation_event.active = (act);\
-  (ev).subnegotiation_event.option = (opt);\
+  (ev).active = (act);\
+  (ev).option = (opt);\
 }
 
 #define EV_WARNING(ev, msg, pos) {\
   BASE_EV(ev, WARNING);\
-  (ev).warning_event.message = (msg);\
-  (ev).warning_event.position = (pos);\
+  (ev).message = (msg);\
+  (ev).position = (pos);\
 }
 
 
@@ -64,9 +64,9 @@ struct telnet_nvt
   action flush_text {
     if (nvt->callbacks.on_recv && nvt->buflen > 0)
     {
-      telnet_event ev;
+      telnet_text_event ev;
       EV_DATA(ev, nvt->buf, nvt->buflen);
-      nvt->callbacks.on_recv(nvt, &ev);
+      nvt->callbacks.on_recv(nvt, (telnet_event*)&ev);
       nvt->buflen = 0;
     }
   }
@@ -79,9 +79,9 @@ struct telnet_nvt
   action basic_command {
     if (nvt->callbacks.on_recv && nvt->buf != NULL)
     {
-      telnet_event ev;
+      telnet_command_event ev;
       EV_COMMAND(ev, fc);
-      nvt->callbacks.on_recv(nvt, &ev);
+      nvt->callbacks.on_recv(nvt, (telnet_event*)&ev);
     }
   }
 
@@ -91,9 +91,9 @@ struct telnet_nvt
   action option_command {
     if (nvt->callbacks.on_recv && nvt->buf != NULL)
     {
-      telnet_event ev;
+      telnet_option_event ev;
       EV_OPTION(ev, nvt->option_mark, fc);
-      nvt->callbacks.on_recv(nvt, &ev);
+      nvt->callbacks.on_recv(nvt, (telnet_event*)&ev);
     }
   }
 
@@ -101,34 +101,34 @@ struct telnet_nvt
     nvt->option_mark = fc;
     if (nvt->callbacks.on_recv && nvt->buf != NULL)
     {
-      telnet_event ev;
+      telnet_subnegotiation_event ev;
       EV_SUBNEGOTIATION(ev, 1, nvt->option_mark);
-      nvt->callbacks.on_recv(nvt, &ev);
+      nvt->callbacks.on_recv(nvt, (telnet_event*)&ev);
     }
   }
   action subneg_command_end {
     if (nvt->callbacks.on_recv && nvt->buf != NULL)
     {
-      telnet_event ev;
+      telnet_subnegotiation_event ev;
       EV_SUBNEGOTIATION(ev, 0, nvt->option_mark);
-      nvt->callbacks.on_recv(nvt, &ev);
+      nvt->callbacks.on_recv(nvt, (telnet_event*)&ev);
     }
   }
 
   action warning_cr {
     if (nvt->callbacks.on_recv && nvt->buf != NULL)
     {
-      telnet_event ev;
+      telnet_warning_event ev;
       EV_WARNING(ev, "Invalid \\r: not followed by \\n or \\0.", fpc-data);
-      nvt->callbacks.on_recv(nvt, &ev);
+      nvt->callbacks.on_recv(nvt, (telnet_event*)&ev);
     }
   }
   action warning_iac {
     if (nvt->callbacks.on_recv && nvt->buf != NULL)
     {
-      telnet_event ev;
+      telnet_warning_event ev;
       EV_WARNING(ev, "IAC followed by invalid command.", fpc-data);
-      nvt->callbacks.on_recv(nvt, &ev);
+      nvt->callbacks.on_recv(nvt, (telnet_event*)&ev);
     }
   }
   
@@ -272,7 +272,7 @@ static size_t telnet_escape(const telnet_byte* data, size_t length, telnet_byte*
     left = right + 1;
     
     // Add the escape sequence.
-    if (safe_concat(seq, 2, out+outlen, outsize-outlen) == 0)
+    if (safe_concat((const telnet_byte*)seq, 2, out+outlen, outsize-outlen) == 0)
       return -1;
     outlen += 2;
   }

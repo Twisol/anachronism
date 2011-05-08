@@ -52,49 +52,44 @@ typedef enum telnet_event_type
   TELNET_EV_WARNING,
 } telnet_event_type;
 
+typedef struct telnet_event
+{
+  telnet_event_type type;
+} telnet_event;
+
 typedef struct telnet_text_event
 {
+  telnet_event SUPER_;
   const telnet_byte* data;
   size_t length;
 } telnet_text_event;
 
 typedef struct telnet_command_event
 {
+  telnet_event SUPER_;
   telnet_byte command;
 } telnet_command_event;
 
 typedef struct telnet_option_event
 {
+  telnet_event SUPER_;
   telnet_byte command;
   telnet_byte option;
 } telnet_option_event;
 
 typedef struct telnet_subnegotiation_event
 {
+  telnet_event SUPER_;
   int active;
   telnet_byte option;
 } telnet_subnegotiation_event;
 
 typedef struct telnet_warning_event
 {
+  telnet_event SUPER_;
   const char* message;
   size_t position;
 } telnet_warning_event;
-
-// The tagged union type passed to the on_recv callback.
-typedef struct telnet_event
-{
-  telnet_event_type type;
-  
-  union
-  {
-    telnet_text_event           text_event;
-    telnet_command_event        command_event;
-    telnet_option_event         option_event;
-    telnet_subnegotiation_event subnegotiation_event;
-    telnet_warning_event        warning_event;
-  };
-} telnet_event;
 
 
 typedef struct telnet_nvt telnet_nvt;
