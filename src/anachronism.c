@@ -542,10 +542,7 @@ static size_t telnet_escape(const telnet_byte* data, size_t length, telnet_byte*
           seq = "\r\0";
           break;
         }
-        else
-        {
-          // !!FALLTHROUGH!!
-        }
+        // !!FALLTHROUGH!!
       default:
         continue; // Move to the next character
     }
