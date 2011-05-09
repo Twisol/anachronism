@@ -532,15 +532,20 @@ static size_t telnet_escape(const telnet_byte* data, size_t length, telnet_byte*
   {
     switch (data[right])
     {
-      case '\r':
-        seq = "\r\0";
-        break;
-      case '\n':
-        seq = "\r\n";
-        break;
       case IAC_IAC:
         seq = "\xFF\xFF";
         break;
+      case '\r':
+        // Only escape \r if it doesn't immediately precede \n.
+        if (right + 1 >= length || data[right+1] != '\n')
+        {
+          seq = "\r\0";
+          break;
+        }
+        else
+        {
+          // !!FALLTHROUGH!!
+        }
       default:
         continue; // Move to the next character
     }
