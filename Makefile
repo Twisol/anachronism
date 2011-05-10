@@ -18,17 +18,17 @@ shared: build/$(SOFILE)
 static: build/libanachronism.a
 
 
-build/$(SOFILE): build/anachronism.o
-	$(CC) -shared -Wl,-soname,$(SONAME) -o build/$(SOFILE) build/anachronism.o
+build/$(SOFILE): build/nvt.o
+	$(CC) -shared -Wl,-soname,$(SONAME) -o build/$(SOFILE) build/nvt.o
 
-build/libanachronism.a: build/anachronism.o
-	ar rcs build/libanachronism.a build/anachronism.o
+build/libanachronism.a: build/nvt.o
+	ar rcs build/libanachronism.a build/nvt.o
 
-build/anachronism.o: src/anachronism.c $(INCLUDE)/anachronism.h
-	$(CC) $(FLAGS) $(CFLAGS) src/anachronism.c -o build/anachronism.o
+build/nvt.o: src/nvt.c $(INCLUDE)/nvt.h
+	$(CC) $(FLAGS) $(CFLAGS) src/nvt.c -o build/nvt.o
 
-src/anachronism.c: src/anachronism.rl src/parser_common.rl
-	ragel -C -G2 src/anachronism.rl -o src/anachronism.c
+src/nvt.c: src/nvt.rl src/parser_common.rl
+	ragel -C -G2 src/nvt.rl -o src/nvt.c
 
 
 install: all
@@ -36,8 +36,8 @@ install: all
 	install -D include/anachronism/* /usr/local/include/anachronism/
 	install -D build/$(SOFILE) /usr/local/lib/$(SOFILE)
 	install -D build/libanachronism.a /usr/local/lib/libanachronism.a
-	ln -s /usr/local/lib/$(SOFILE) /usr/local/lib/$(SONAME)
-	ln -s /usr/local/lib/$(SOFILE) /usr/local/lib/$(SO)
+	ln -s -f /usr/local/lib/$(SOFILE) /usr/local/lib/$(SONAME)
+	ln -s -f /usr/local/lib/$(SOFILE) /usr/local/lib/$(SO)
 
 uninstall:
 	-rm -rf /usr/local/include/anachronism
@@ -47,7 +47,7 @@ uninstall:
 	-rm /usr/local/lib/$(SO)
 
 clean:
-	-rm -f build/anachronism.o
+	-rm -f build/nvt.o
 
 distclean: clean
 	-rm -f build/libanachronism.a build/$(SOFILE)
