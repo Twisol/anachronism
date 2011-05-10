@@ -1,3 +1,6 @@
+#ifndef ANACHRONISM_ANACHRONISM_H
+#define ANACHRONISM_ANACHRONISM_H
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -227,3 +230,5 @@ telnet_error telnet_send_subnegotiation(telnet_nvt* nvt, const telnet_byte optio
 #ifdef __cplusplus
 }
 #endif
+
+#endif // ANACHRONISM_ANACHRONISM_H

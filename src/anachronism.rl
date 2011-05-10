@@ -1,6 +1,6 @@
 #include <stdlib.h>
 #include <string.h>
-#include "anachronism.h"
+#include <anachronism/anachronism.h>
 
 #define BASE_EV(ev, t) \
   (ev).SUPER_.type = TELNET_EV_##t

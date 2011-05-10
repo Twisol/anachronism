@@ -2,7 +2,7 @@
 #line 1 "src/anachronism.rl"
 #include <stdlib.h>
 #include <string.h>
-#include "anachronism.h"
+#include <anachronism/anachronism.h>
 
 #define BASE_EV(ev, t) \
   (ev).SUPER_.type = TELNET_EV_##t
@@ -57,11 +57,11 @@ struct telnet_nvt
 
 
 #line 60 "src/anachronism.c"
-static const int telnet_parser_start = 7;
-static const int telnet_parser_first_final = 7;
-static const int telnet_parser_error = -1;
+static const int telnet_parser_start = 8;
+static const int telnet_parser_first_final = 8;
+static const int telnet_parser_error = 0;
 
-static const int telnet_parser_en_main = 7;
+static const int telnet_parser_en_main = 8;
 
 
 #line 137 "src/anachronism.rl"
@@ -166,14 +166,14 @@ tr1:
       nvt->buflen = 0;
     }
   }
-	goto st7;
+	goto st8;
 tr2:
 #line 74 "src/anachronism.rl"
 	{
     if (nvt->callbacks.on_recv && nvt->buf != NULL)
       nvt->buf[nvt->buflen++] = (*( nvt->p));
   }
-	goto st7;
+	goto st8;
 tr3:
 #line 64 "src/anachronism.rl"
 	{
@@ -194,8 +194,8 @@ tr3:
       nvt->callbacks.on_recv(nvt, (telnet_event*)&ev);
     }
   }
-	goto st7;
-tr12:
+	goto st8;
+tr13:
 #line 64 "src/anachronism.rl"
 	{
     if (nvt->callbacks.on_recv && nvt->buflen > 0)
@@ -226,8 +226,8 @@ tr12:
       nvt->callbacks.on_recv(nvt, (telnet_event*)&ev);
     }
   }
-	goto st7;
-tr13:
+	goto st8;
+tr14:
 #line 64 "src/anachronism.rl"
 	{
     if (nvt->callbacks.on_recv && nvt->buflen > 0)
@@ -247,8 +247,8 @@ tr13:
       nvt->callbacks.on_recv(nvt, (telnet_event*)&ev);
     }
   }
-	goto st7;
-tr14:
+	goto st8;
+tr15:
 #line 91 "src/anachronism.rl"
 	{
     if (nvt->callbacks.on_recv && nvt->buf != NULL)
@@ -258,46 +258,50 @@ tr14:
       nvt->callbacks.on_recv(nvt, (telnet_event*)&ev);
     }
   }
-	goto st7;
-st7:
+	goto st8;
+st8:
 	if ( ++( nvt->p) == ( nvt->pe) )
-		goto _test_eof7;
-case 7:
+		goto _test_eof8;
+case 8:
 #line 267 "src/anachronism.c"
 	switch( (*( nvt->p)) ) {
-		case 13u: goto tr15;
-		case 255u: goto st1;
+		case 13u: goto tr16;
+		case 255u: goto st2;
 	}
 	goto tr2;
-tr15:
+tr16:
 #line 74 "src/anachronism.rl"
 	{
     if (nvt->callbacks.on_recv && nvt->buf != NULL)
       nvt->buf[nvt->buflen++] = (*( nvt->p));
   }
-	goto st0;
-st0:
-	if ( ++( nvt->p) == ( nvt->pe) )
-		goto _test_eof0;
-case 0:
-#line 284 "src/anachronism.c"
-	switch( (*( nvt->p)) ) {
-		case 0u: goto st7;
-		case 10u: goto tr2;
-	}
-	goto tr1;
+	goto st1;
 st1:
 	if ( ++( nvt->p) == ( nvt->pe) )
 		goto _test_eof1;
 case 1:
+#line 284 "src/anachronism.c"
 	switch( (*( nvt->p)) ) {
-		case 250u: goto tr4;
+		case 0u: goto st8;
+		case 10u: goto tr2;
+	}
+	goto tr1;
+st2:
+	if ( ++( nvt->p) == ( nvt->pe) )
+		goto _test_eof2;
+case 2:
+	switch( (*( nvt->p)) ) {
+		case 240u: goto st0;
+		case 250u: goto tr5;
 		case 255u: goto tr2;
 	}
 	if ( 251u <= (*( nvt->p)) && (*( nvt->p)) <= 254u )
-		goto tr5;
+		goto tr6;
 	goto tr3;
-tr4:
+st0:
+ nvt->cs = 0;
+	goto _out;
+tr5:
 #line 64 "src/anachronism.rl"
 	{
     if (nvt->callbacks.on_recv && nvt->buflen > 0)
@@ -308,14 +312,14 @@ tr4:
       nvt->buflen = 0;
     }
   }
-	goto st2;
-st2:
+	goto st3;
+st3:
 	if ( ++( nvt->p) == ( nvt->pe) )
-		goto _test_eof2;
-case 2:
-#line 317 "src/anachronism.c"
-	goto tr6;
-tr11:
+		goto _test_eof3;
+case 3:
+#line 321 "src/anachronism.c"
+	goto tr7;
+tr12:
 #line 6 "src/parser_common.rl"
 	{( nvt->p)--;}
 #line 118 "src/anachronism.rl"
@@ -337,15 +341,15 @@ tr11:
       nvt->buflen = 0;
     }
   }
-	goto st3;
-tr7:
+	goto st4;
+tr8:
 #line 74 "src/anachronism.rl"
 	{
     if (nvt->callbacks.on_recv && nvt->buf != NULL)
       nvt->buf[nvt->buflen++] = (*( nvt->p));
   }
-	goto st3;
-tr6:
+	goto st4;
+tr7:
 #line 100 "src/anachronism.rl"
 	{
     nvt->option_mark = (*( nvt->p));
@@ -356,44 +360,44 @@ tr6:
       nvt->callbacks.on_recv(nvt, (telnet_event*)&ev);
     }
   }
-	goto st3;
-st3:
-	if ( ++( nvt->p) == ( nvt->pe) )
-		goto _test_eof3;
-case 3:
-#line 365 "src/anachronism.c"
-	switch( (*( nvt->p)) ) {
-		case 13u: goto tr8;
-		case 255u: goto st5;
-	}
-	goto tr7;
-tr8:
-#line 74 "src/anachronism.rl"
-	{
-    if (nvt->callbacks.on_recv && nvt->buf != NULL)
-      nvt->buf[nvt->buflen++] = (*( nvt->p));
-  }
 	goto st4;
 st4:
 	if ( ++( nvt->p) == ( nvt->pe) )
 		goto _test_eof4;
 case 4:
-#line 382 "src/anachronism.c"
+#line 369 "src/anachronism.c"
 	switch( (*( nvt->p)) ) {
-		case 0u: goto st3;
-		case 10u: goto tr7;
+		case 13u: goto tr9;
+		case 255u: goto st6;
 	}
-	goto tr11;
+	goto tr8;
+tr9:
+#line 74 "src/anachronism.rl"
+	{
+    if (nvt->callbacks.on_recv && nvt->buf != NULL)
+      nvt->buf[nvt->buflen++] = (*( nvt->p));
+  }
+	goto st5;
 st5:
 	if ( ++( nvt->p) == ( nvt->pe) )
 		goto _test_eof5;
 case 5:
+#line 386 "src/anachronism.c"
 	switch( (*( nvt->p)) ) {
-		case 240u: goto tr13;
-		case 255u: goto tr7;
+		case 0u: goto st4;
+		case 10u: goto tr8;
 	}
 	goto tr12;
-tr5:
+st6:
+	if ( ++( nvt->p) == ( nvt->pe) )
+		goto _test_eof6;
+case 6:
+	switch( (*( nvt->p)) ) {
+		case 240u: goto tr14;
+		case 255u: goto tr8;
+	}
+	goto tr13;
+tr6:
 #line 64 "src/anachronism.rl"
 	{
     if (nvt->callbacks.on_recv && nvt->buflen > 0)
@@ -408,28 +412,28 @@ tr5:
 	{
     nvt->option_mark= (*( nvt->p));
   }
-	goto st6;
-st6:
+	goto st7;
+st7:
 	if ( ++( nvt->p) == ( nvt->pe) )
-		goto _test_eof6;
-case 6:
-#line 417 "src/anachronism.c"
-	goto tr14;
+		goto _test_eof7;
+case 7:
+#line 421 "src/anachronism.c"
+	goto tr15;
 	}
-	_test_eof7:  nvt->cs = 7; goto _test_eof; 
-	_test_eof0:  nvt->cs = 0; goto _test_eof; 
+	_test_eof8:  nvt->cs = 8; goto _test_eof; 
 	_test_eof1:  nvt->cs = 1; goto _test_eof; 
 	_test_eof2:  nvt->cs = 2; goto _test_eof; 
 	_test_eof3:  nvt->cs = 3; goto _test_eof; 
 	_test_eof4:  nvt->cs = 4; goto _test_eof; 
 	_test_eof5:  nvt->cs = 5; goto _test_eof; 
 	_test_eof6:  nvt->cs = 6; goto _test_eof; 
+	_test_eof7:  nvt->cs = 7; goto _test_eof; 
 
 	_test_eof: {}
 	if ( ( nvt->p) == ( nvt->eof) )
 	{
 	switch (  nvt->cs ) {
-	case 7: 
+	case 8: 
 #line 64 "src/anachronism.rl"
 	{
     if (nvt->callbacks.on_recv && nvt->buflen > 0)
@@ -441,10 +445,11 @@ case 6:
     }
   }
 	break;
-#line 445 "src/anachronism.c"
+#line 449 "src/anachronism.c"
 	}
 	}
 
+	_out: {}
 	}
 
 #line 204 "src/anachronism.rl"

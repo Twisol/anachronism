@@ -1,38 +1,55 @@
+SHELL = sh
+
 CC     = gcc
-FLAGS  = -c -fPIC -I.
+FLAGS  = -c -fPIC -Iinclude/
 CFLAGS = --pedantic -Wall -Wextra -march=native -std=gnu99
+INCLUDE = include/anachronism
+
+VERSION_MAJOR = 0
+VERSION = $(VERSION_MAJOR).1.0
+
+SO = libanachronism.so
+SOFILE = $(SO).$(VERSION)
+SONAME = $(SO).$(VERSION_MAJOR)
 
 
 all: static shared
-shared: src/libanachronism.so.1.0.0
-static: src/libanachronism.a
+shared: build/$(SOFILE)
+static: build/libanachronism.a
 
 
-src/libanachronism.so.1.0.0: src/anachronism.o
-	$(CC) -shared -Wl,-soname,libanachronism.so.1 -o src/libanachronism.so.1.0.0 src/anachronism.o
+build/$(SOFILE): build/anachronism.o
+	$(CC) -shared -Wl,-soname,$(SONAME) -o build/$(SOFILE) build/anachronism.o
 
-src/libanachronism.a: src/anachronism.o
-	ar rcs src/libanachronism.a src/anachronism.o
+build/libanachronism.a: build/anachronism.o
+	ar rcs build/libanachronism.a build/anachronism.o
 
-src/anachronism.o: src/anachronism.c src/anachronism.h
-	$(CC) $(FLAGS) $(CFLAGS) src/anachronism.c -o src/anachronism.o
+build/anachronism.o: src/anachronism.c $(INCLUDE)/anachronism.h
+	$(CC) $(FLAGS) $(CFLAGS) src/anachronism.c -o build/anachronism.o
 
 src/anachronism.c: src/anachronism.rl src/parser_common.rl
 	ragel -C -G2 src/anachronism.rl -o src/anachronism.c
 
 
-install:
-	install -D src/libanachronism.so.1.0.0 /usr/local/lib/libanachronism.so.1.0.0
-	install -D src/libanachronism.a /usr/local/lib/libanachronism.a
+install: all
+	install -D -d /usr/local/include/anachronism/ /usr/local/lib
+	install -D include/anachronism/* /usr/local/include/anachronism/
+	install -D build/$(SOFILE) /usr/local/lib/$(SOFILE)
+	install -D build/libanachronism.a /usr/local/lib/libanachronism.a
+	ln -s /usr/local/lib/$(SOFILE) /usr/local/lib/$(SONAME)
+	ln -s /usr/local/lib/$(SOFILE) /usr/local/lib/$(SO)
 
 uninstall:
+	-rm -rf /usr/local/include/anachronism
 	-rm /usr/local/lib/libanachronism.a
-	-rm /usr/local/lib/libanachronism.so.1.0.0
+	-rm /usr/local/lib/$(SOFILE)
+	-rm /usr/local/lib/$(SONAME)
+	-rm /usr/local/lib/$(SO)
 
 clean:
-	-rm -f src/anachronism.o src/anachronism.c
+	-rm -f build/anachronism.o
 
 distclean: clean
-	-rm -f src/libanachronism.a src/libanachronism.so.1.0.0
+	-rm -f build/libanachronism.a build/$(SOFILE)
 
 .PHONY: all static shared clean distclean install uninstall
