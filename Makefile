@@ -17,10 +17,8 @@ src/libanachronism.a: src/anachronism.o
 src/anachronism.o: src/anachronism.c src/anachronism.h
 	$(CC) $(FLAGS) $(CFLAGS) src/anachronism.c -o src/anachronism.o
 
-src/anachronism.c: src/anachronism.rl
+src/anachronism.c: src/anachronism.rl src/parser_common.rl
 	ragel -C -G2 src/anachronism.rl -o src/anachronism.c
-
-src/anachronism.rl: src/parser_common.rl
 
 
 install:

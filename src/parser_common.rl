@@ -33,14 +33,9 @@
   # IAC IAC is interpreted as a plain-text IAC byte.
   
   # Sorting the above IAC commands by type:
-  iac_command_type = NOP | DM | BRK | IP | AO | AYT | EC | EL | GA;
   iac_option_type  = WILL | WONT | DO | DONT;
   iac_subneg_type  = SB;
-  iac_unknown_type = ^( iac_command_type
-                      | iac_option_type
-                      | iac_subneg_type
-                      | IAC
-                      );
+  iac_command_type = ^(iac_option_type | iac_subneg_type | IAC | SE);
   
   ###
   # Plain text
@@ -70,12 +65,9 @@
                | ^(IAC|SE) @fhold @warning_iac
                ) >flush_text @subneg_command_end;
   
-  iac_unknown = iac_unknown_type @warning_iac @basic_command;
-  
   iac_seq = ( iac_command
             | iac_option
             | iac_subneg
-            | iac_unknown
             );
   
   ###

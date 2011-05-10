@@ -185,15 +185,6 @@ tr3:
       nvt->buflen = 0;
     }
   }
-#line 126 "src/anachronism.rl"
-	{
-    if (nvt->callbacks.on_recv && nvt->buf != NULL)
-    {
-      telnet_warning_event ev;
-      EV_WARNING(ev, "IAC followed by invalid command.", ( nvt->p)-data);
-      nvt->callbacks.on_recv(nvt, (telnet_event*)&ev);
-    }
-  }
 #line 79 "src/anachronism.rl"
 	{
     if (nvt->callbacks.on_recv && nvt->buf != NULL)
@@ -204,28 +195,7 @@ tr3:
     }
   }
 	goto st7;
-tr4:
-#line 64 "src/anachronism.rl"
-	{
-    if (nvt->callbacks.on_recv && nvt->buflen > 0)
-    {
-      telnet_text_event ev;
-      EV_DATA(ev, nvt->buf, nvt->buflen);
-      nvt->callbacks.on_recv(nvt, (telnet_event*)&ev);
-      nvt->buflen = 0;
-    }
-  }
-#line 79 "src/anachronism.rl"
-	{
-    if (nvt->callbacks.on_recv && nvt->buf != NULL)
-    {
-      telnet_command_event ev;
-      EV_COMMAND(ev, (*( nvt->p)));
-      nvt->callbacks.on_recv(nvt, (telnet_event*)&ev);
-    }
-  }
-	goto st7;
-tr13:
+tr12:
 #line 64 "src/anachronism.rl"
 	{
     if (nvt->callbacks.on_recv && nvt->buflen > 0)
@@ -257,7 +227,7 @@ tr13:
     }
   }
 	goto st7;
-tr14:
+tr13:
 #line 64 "src/anachronism.rl"
 	{
     if (nvt->callbacks.on_recv && nvt->buflen > 0)
@@ -278,7 +248,7 @@ tr14:
     }
   }
 	goto st7;
-tr15:
+tr14:
 #line 91 "src/anachronism.rl"
 	{
     if (nvt->callbacks.on_recv && nvt->buf != NULL)
@@ -293,13 +263,13 @@ st7:
 	if ( ++( nvt->p) == ( nvt->pe) )
 		goto _test_eof7;
 case 7:
-#line 297 "src/anachronism.c"
+#line 267 "src/anachronism.c"
 	switch( (*( nvt->p)) ) {
-		case 13u: goto tr16;
+		case 13u: goto tr15;
 		case 255u: goto st1;
 	}
 	goto tr2;
-tr16:
+tr15:
 #line 74 "src/anachronism.rl"
 	{
     if (nvt->callbacks.on_recv && nvt->buf != NULL)
@@ -310,7 +280,7 @@ st0:
 	if ( ++( nvt->p) == ( nvt->pe) )
 		goto _test_eof0;
 case 0:
-#line 314 "src/anachronism.c"
+#line 284 "src/anachronism.c"
 	switch( (*( nvt->p)) ) {
 		case 0u: goto st7;
 		case 10u: goto tr2;
@@ -321,16 +291,13 @@ st1:
 		goto _test_eof1;
 case 1:
 	switch( (*( nvt->p)) ) {
-		case 250u: goto tr5;
+		case 250u: goto tr4;
 		case 255u: goto tr2;
 	}
-	if ( (*( nvt->p)) > 249u ) {
-		if ( 251u <= (*( nvt->p)) && (*( nvt->p)) <= 254u )
-			goto tr6;
-	} else if ( (*( nvt->p)) >= 241u )
-		goto tr4;
+	if ( 251u <= (*( nvt->p)) && (*( nvt->p)) <= 254u )
+		goto tr5;
 	goto tr3;
-tr5:
+tr4:
 #line 64 "src/anachronism.rl"
 	{
     if (nvt->callbacks.on_recv && nvt->buflen > 0)
@@ -346,9 +313,9 @@ st2:
 	if ( ++( nvt->p) == ( nvt->pe) )
 		goto _test_eof2;
 case 2:
-#line 350 "src/anachronism.c"
-	goto tr7;
-tr12:
+#line 317 "src/anachronism.c"
+	goto tr6;
+tr11:
 #line 6 "src/parser_common.rl"
 	{( nvt->p)--;}
 #line 118 "src/anachronism.rl"
@@ -371,14 +338,14 @@ tr12:
     }
   }
 	goto st3;
-tr8:
+tr7:
 #line 74 "src/anachronism.rl"
 	{
     if (nvt->callbacks.on_recv && nvt->buf != NULL)
       nvt->buf[nvt->buflen++] = (*( nvt->p));
   }
 	goto st3;
-tr7:
+tr6:
 #line 100 "src/anachronism.rl"
 	{
     nvt->option_mark = (*( nvt->p));
@@ -394,13 +361,13 @@ st3:
 	if ( ++( nvt->p) == ( nvt->pe) )
 		goto _test_eof3;
 case 3:
-#line 398 "src/anachronism.c"
+#line 365 "src/anachronism.c"
 	switch( (*( nvt->p)) ) {
-		case 13u: goto tr9;
+		case 13u: goto tr8;
 		case 255u: goto st5;
 	}
-	goto tr8;
-tr9:
+	goto tr7;
+tr8:
 #line 74 "src/anachronism.rl"
 	{
     if (nvt->callbacks.on_recv && nvt->buf != NULL)
@@ -411,22 +378,22 @@ st4:
 	if ( ++( nvt->p) == ( nvt->pe) )
 		goto _test_eof4;
 case 4:
-#line 415 "src/anachronism.c"
+#line 382 "src/anachronism.c"
 	switch( (*( nvt->p)) ) {
 		case 0u: goto st3;
-		case 10u: goto tr8;
+		case 10u: goto tr7;
 	}
-	goto tr12;
+	goto tr11;
 st5:
 	if ( ++( nvt->p) == ( nvt->pe) )
 		goto _test_eof5;
 case 5:
 	switch( (*( nvt->p)) ) {
-		case 240u: goto tr14;
-		case 255u: goto tr8;
+		case 240u: goto tr13;
+		case 255u: goto tr7;
 	}
-	goto tr13;
-tr6:
+	goto tr12;
+tr5:
 #line 64 "src/anachronism.rl"
 	{
     if (nvt->callbacks.on_recv && nvt->buflen > 0)
@@ -446,8 +413,8 @@ st6:
 	if ( ++( nvt->p) == ( nvt->pe) )
 		goto _test_eof6;
 case 6:
-#line 450 "src/anachronism.c"
-	goto tr15;
+#line 417 "src/anachronism.c"
+	goto tr14;
 	}
 	_test_eof7:  nvt->cs = 7; goto _test_eof; 
 	_test_eof0:  nvt->cs = 0; goto _test_eof; 
@@ -474,7 +441,7 @@ case 6:
     }
   }
 	break;
-#line 478 "src/anachronism.c"
+#line 445 "src/anachronism.c"
 	}
 	}
 
