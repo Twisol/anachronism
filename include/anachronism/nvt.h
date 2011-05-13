@@ -5,19 +5,7 @@
 extern "C" {
 #endif
 
-#include <stdlib.h> /* for size_t */
-
-// Telnet bytes must be unsigned
-typedef unsigned char telnet_byte;
-
-// Error codes returned from API functions
-typedef enum telnet_error {
-  TELNET_E_BAD_NVT        = -3, // The telnet_nvt* passed is NULL
-  TELNET_E_BAD_COMMAND    = -2, // The telnet_byte passed is not an allowed command in this API method
-  TELNET_E_SUBNEGOTIATING = -1, // This operation is not permitted while subnegotiating (or only while subnegotiating)
-  TELNET_E_ALLOC          =  0, // Not enough memory to allocate essential library structures
-  TELNET_E_OK             =  1, // Huge Success!
-} telnet_error;
+#include <anachronism/common.h>
 
 enum
 {
@@ -39,72 +27,56 @@ enum
   IAC_IAC,
 };
 
-/* Events:
- * TEXT: A stretch of plain data was received. (data, length)
- * COMMAND: A simple IAC comamnd was recevied. (command)
- * OPTION: An option request was received. (command, option)
- * SUBNEGOTIATION: A subnegotiation sequence has been initiated/terminated. (active, option)
- * WARNING: A non-fatal invalid sequence was received. (message, position)
- */
-typedef enum telnet_event_type
+typedef enum telnet_channel_mode
 {
-  TELNET_EV_DATA,
-  TELNET_EV_COMMAND,
-  TELNET_EV_OPTION,
-  TELNET_EV_SUBNEGOTIATION,
-  TELNET_EV_WARNING,
-} telnet_event_type;
+  TELNET_CHANNEL_OFF,
+  TELNET_CHANNEL_ON,
+  TELNET_CHANNEL_LAZY,
+} telnet_channel_mode;
 
-typedef struct telnet_event
+typedef enum telnet_channel_event
 {
-  telnet_event_type type;
-} telnet_event;
+  TELNET_CHANNEL_EV_BEGIN,
+  TELNET_CHANNEL_EV_END,
+  TELNET_CHANNEL_EV_DATA,
+} telnet_channel_event;
 
-typedef struct telnet_text_event
+typedef enum telnet_channel_provider
 {
-  telnet_event SUPER_;
-  const telnet_byte* data;
-  size_t length;
-} telnet_text_event;
+  TELNET_CHANNEL_LOCAL,
+  TELNET_CHANNEL_REMOTE,
+} telnet_channel_provider;
 
-typedef struct telnet_command_event
+enum
 {
-  telnet_event SUPER_;
-  telnet_byte command;
-} telnet_command_event;
+  TELNET_MAIN_CHANNEL,
+  TELNET_INVALID_CHANNEL,
+};
 
-typedef struct telnet_option_event
-{
-  telnet_event SUPER_;
-  telnet_byte command;
-  telnet_byte option;
-} telnet_option_event;
-
-typedef struct telnet_subnegotiation_event
-{
-  telnet_event SUPER_;
-  int active;
-  telnet_byte option;
-} telnet_subnegotiation_event;
-
-typedef struct telnet_warning_event
-{
-  telnet_event SUPER_;
-  const char* message;
-  size_t position;
-} telnet_warning_event;
+/*
+typedef struct telnet_interrupt_code {
+  // [0, 255] are channels, -1 is main, anything else is illegal
+  int option : 9;
+  
+  // option-specific error code
+  unsigned int code : 7;
+} telnet_interrupt_code;
+*/
 
 
 typedef struct telnet_nvt telnet_nvt;
+typedef struct telnet_channel telnet_channel;
 
-typedef void (*telnet_recv_callback)(telnet_nvt* nvt, telnet_event* event);
-typedef void (*telnet_send_callback)(telnet_nvt* nvt, const telnet_byte* data, size_t length);
+typedef void (*telnet_event_callback)(telnet_nvt* nvt, telnet_event* event);
+                                     
+typedef void (*telnet_channel_toggle_callback)(telnet_channel* channel,
+                                               char open,
+                                               telnet_channel_provider who);
 
-typedef struct telnet_callbacks
-{
-  telnet_recv_callback on_recv; // Called when a Telnet event is received
-  telnet_send_callback on_send; // Called when outgoing data should be sent.
-} telnet_callbacks;
+typedef void (*telnet_channel_data_callback)(telnet_channel* channel,
+                                             telnet_channel_event type,
+                                             const telnet_byte* data,
+                                             size_t length);
 
 /**
   Creates a new Telnet NVT.
@@ -112,23 +84,9 @@ typedef struct telnet_callbacks
   Errors:
     TELNET_E_ALLOC - Unable to allocate enough memory for the NVT.
  */
-telnet_nvt* telnet_new_nvt();
+telnet_nvt* telnet_nvt_new(telnet_event_callback callback, void* userdata);
  
-void telnet_free_nvt(telnet_nvt* nvt);
-
-/**
-  Provides a pointer to the structure that contains the event callback pointers.
-  This is used to register your own event callbacks.
-  
-  Errors:
-    TELNET_E_BAD_NVT - Invalid telnet_nvt* parameter.
-  
-  Example:
-    telnet_callbacks* callbacks;
-    telnet_get_callbacks(nvt, &callbacks);
-    callbacks.on_recv = &my_recv_callback;
- */
-telnet_error telnet_get_callbacks(telnet_nvt* nvt, telnet_callbacks** callbacks);
+void telnet_nvt_free(telnet_nvt* nvt);
 
 /**
   Every NVT can have some user-specific data attached, such as a user-defined struct.
@@ -138,14 +96,10 @@ telnet_error telnet_get_callbacks(telnet_nvt* nvt, telnet_callbacks** callbacks)
     TELNET_E_BAD_NVT - Invalid telnet_nvt* parameter.
   
   Example:
-    FILE* out = ...;
-    telnet_set_userdata(nvt, (void*)out);
- 
-    // (later, in the on_send callback)
-    FILE* out = NULL;
+    // assuming a FILE was passed to telnet_nvt_new():
+    FILE out = NULL;
     telnet_get_userdata(nvt, (void**)&out);
  */
-telnet_error telnet_set_userdata(telnet_nvt* nvt, void* udata);
 telnet_error telnet_get_userdata(telnet_nvt* nvt, void** udata);
 
 /**
@@ -157,7 +111,7 @@ telnet_error telnet_get_userdata(telnet_nvt* nvt, void** udata);
     TELNET_E_BAD_NVT - Invalid telnet_nvt* parameter.
     TELNET_E_ALLOC   - Unable to allocate destination buffer for incoming text.
  */
-telnet_error telnet_recv(telnet_nvt* nvt, const telnet_byte* data, const size_t length, size_t* bytes_used);
+telnet_error telnet_recv(telnet_nvt* nvt, const telnet_byte* data, size_t length, size_t* bytes_used);
 
 /**
   If currently parsing (i.e. telnet_recv() is running), halts the parser.
@@ -226,6 +180,26 @@ telnet_error telnet_send_subnegotiation_end(telnet_nvt* nvt);
     TELNET_E_ALLOC          - Unable to allocate destination buffer for outgoing text.
  */
 telnet_error telnet_send_subnegotiation(telnet_nvt* nvt, const telnet_byte option, const telnet_byte* data, const size_t length);
+
+
+telnet_error telnet_channel_register(telnet_channel* channel,
+                                     short option,
+                                     telnet_channel_mode local,
+                                     telnet_channel_mode remote);
+
+telnet_channel* telnet_channel_new(telnet_nvt* nvt,
+                                   telnet_channel_toggle_callback on_toggle,
+                                   telnet_channel_data_callback on_data,
+                                   void* userdata);
+
+telnet_error telnet_channel_get_userdata(telnet_channel* channel,
+                                         void** userdata);
+
+telnet_error telnet_channel_get_nvt(telnet_channel* channel, telnet_nvt** nvt);
+
+telnet_error telnet_channel_send(telnet_channel* channel,
+                                 const telnet_byte* data,
+                                 size_t length);
 
 #ifdef __cplusplus
 }

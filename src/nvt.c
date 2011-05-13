@@ -1,110 +1,301 @@
-
-#line 1 "src/anachronism.rl"
 #include <stdlib.h>
 #include <string.h>
-#include <anachronism/anachronism.h>
+#include <anachronism/nvt.h>
+#include <anachronism/parser.h>
 
-#define BASE_EV(ev, t) \
-  (ev).SUPER_.type = TELNET_EV_##t
-
-#define EV_DATA(ev, text, len) {\
-  BASE_EV(ev, DATA);\
-  (ev).data = (text);\
-  (ev).length = (len);\
+#define CLOSE_CALLBACK(channel, who) { \
+  channel->open -= 1; \
+  if ((channel)->on_toggle) \
+    (channel)->on_toggle((channel), 0, (who)); \
 }
 
-#define EV_COMMAND(ev, cmd) {\
-  BASE_EV(ev, COMMAND);\
-  (ev).command = (cmd);\
+#define OPEN_CALLBACK(channel, who) { \
+  channel->open += 1; \
+  if ((channel)->on_toggle) \
+    (channel)->on_toggle((channel), 1, (who)); \
 }
 
-#define EV_OPTION(ev, cmd, opt) {\
-  BASE_EV(ev, OPTION);\
-  (ev).command = (cmd);\
-  (ev).option = (opt);\
+#define DATA_CALLBACK(channel, msg, data, length) { \
+  if ((channel)->open > 0 && (channel)->on_data) \
+    (channel)->on_data((channel), (msg), (data), (length)); \
 }
 
-#define EV_SUBNEGOTIATION(ev, act, opt) {\
-  BASE_EV(ev, SUBNEGOTIATION);\
-  (ev).active = (act);\
-  (ev).option = (opt);\
+
+#define EV_SEND(ev, text, len) { \
+  (ev).SUPER_.type = TELNET_EV_SEND; \
+  (ev).data = (text); \
+  (ev).length = (len); \
 }
 
-#define EV_WARNING(ev, msg, pos) {\
-  BASE_EV(ev, WARNING);\
-  (ev).message = (msg);\
-  (ev).position = (pos);\
-}
+typedef enum qstate {
+  Q_NO = 0,  Q_WANTYES, Q_WANTYESNO,
+  Q_YES,     Q_WANTNO, Q_WANTNOYES,
+} qstate;
 
+typedef struct telnet_qstate
+{
+  unsigned int r_current : 3;
+  unsigned int r_lazy : 1;
+  
+  unsigned int l_current : 3;
+  unsigned int l_lazy : 1;
+} telnet_qstate;
+
+struct telnet_channel
+{
+  telnet_nvt* nvt;
+  short option;
+  void* userdata;
+  unsigned char open;
+  
+  telnet_channel_toggle_callback on_toggle;
+  telnet_channel_data_callback on_data;
+};
 
 struct telnet_nvt
 {
-  int cs; /* current Ragel state */
-  const telnet_byte* p; /* current position */
-  const telnet_byte* pe; /* end of current packet */
-  const telnet_byte* eof; /* end-of-file marker */
+  telnet_parser* parser;
+  telnet_qstate options[256]; /* track the state of each subnegotiation option */
+  telnet_channel* channels[256]; /* track all registered channels */
+  telnet_channel* primary; /* the main channel */
   
-  telnet_byte option_mark; /* temporary storage for a command byte */
-  unsigned char options[256]; /* track the state of each subnegotiation option */
+  short current_local;
+  short current_remote;
   
-  telnet_byte* buf; /* Buffer to build up a stretch of text in. */
-  size_t buflen; /* Length so far of the buffer. */
-  
-  telnet_callbacks callbacks;
+  telnet_event_callback callback;
   void* userdata;
   int subnegotiating;
 };
 
+static telnet_channel* get_current_local(telnet_nvt* nvt)
+{
+  if (nvt->current_local == TELNET_MAIN_CHANNEL)
+    return nvt->primary;
+  else
+    return nvt->channels[nvt->current_local];
+}
 
-#line 60 "src/anachronism.c"
-static const int telnet_parser_start = 8;
-static const int telnet_parser_first_final = 8;
-static const int telnet_parser_error = 0;
+static void set_current_local(telnet_nvt* nvt, short channel)
+{
+  nvt->current_local = channel;
+}
 
-static const int telnet_parser_en_main = 8;
+static void process_option_event(telnet_nvt* nvt,
+                                 telnet_byte command,
+                                 telnet_byte option)
+{
+  telnet_channel* channel = nvt->channels[option];
+  telnet_qstate* q = &nvt->options[option];
+  // If the channel isn't registered, that's okay!
+  // Every qstate begins zeroed-out, and Q_NO is 0.
+  
+  switch (command)
+  {
+    case IAC_WILL:
+      switch (q->r_current)
+      {
+        case Q_NO:
+          telnet_send_option(nvt, IAC_DONT, option);
+          break;
+        case Q_WANTNO:
+          // error
+          q->r_current = Q_NO;
+          CLOSE_CALLBACK(channel, TELNET_CHANNEL_REMOTE);
+          break;
+        case Q_WANTNOYES:
+          // error
+          q->r_current = Q_YES;
+          CLOSE_CALLBACK(channel, TELNET_CHANNEL_REMOTE);
+          OPEN_CALLBACK(channel, TELNET_CHANNEL_REMOTE);
+          break;
+        case Q_WANTYES:
+          if (q->r_lazy)
+            telnet_send_option(nvt, IAC_DO, option);
+          q->r_current = Q_YES;
+          OPEN_CALLBACK(channel, TELNET_CHANNEL_REMOTE);
+          break;
+        case Q_WANTYESNO:
+          telnet_send_option(nvt, IAC_DONT, option);
+          q->r_current = Q_WANTNO;
+          OPEN_CALLBACK(channel, TELNET_CHANNEL_REMOTE);
+          break;
+      }
+      break;
+    case IAC_WONT:
+      switch (q->r_current)
+      {
+        case Q_YES:
+          telnet_send_option(nvt, IAC_DONT, option);
+          q->r_current = Q_NO;
+          CLOSE_CALLBACK(channel, TELNET_CHANNEL_REMOTE);
+          break;
+        case Q_WANTNO:
+          q->r_current = Q_NO;
+          CLOSE_CALLBACK(channel, TELNET_CHANNEL_REMOTE);
+          break;
+        case Q_WANTNOYES:
+          if (!q->r_lazy)
+            telnet_send_option(nvt, IAC_DO, option);
+          q->r_current = Q_WANTYES;
+          CLOSE_CALLBACK(channel, TELNET_CHANNEL_REMOTE);
+          break;
+        case Q_WANTYES:
+          q->r_current = Q_NO;
+          break;
+        case Q_WANTYESNO:
+          q->r_current = Q_NO;
+          break;
+      }
+      break;
+    case IAC_DO:
+      switch (q->l_current)
+      {
+        case Q_NO:
+          telnet_send_option(nvt, IAC_WONT, option);
+          break;
+        case Q_WANTNO:
+          // error
+          q->l_current = Q_NO;
+          CLOSE_CALLBACK(channel, TELNET_CHANNEL_LOCAL);
+          break;
+        case Q_WANTNOYES:
+          // error
+          q->l_current = Q_YES;
+          CLOSE_CALLBACK(channel, TELNET_CHANNEL_LOCAL);
+          OPEN_CALLBACK(channel, TELNET_CHANNEL_LOCAL);
+          break;
+        case Q_WANTYES:
+          if (q->l_lazy)
+            telnet_send_option(nvt, IAC_WILL, option);
+          q->l_current = Q_YES;
+          OPEN_CALLBACK(channel, TELNET_CHANNEL_LOCAL);
+          break;
+        case Q_WANTYESNO:
+          q->l_current = Q_WANTNO;
+          telnet_send_option(nvt, IAC_WONT, option);
+          OPEN_CALLBACK(channel, TELNET_CHANNEL_LOCAL);
+          break;
+      }
+      break;
+    case IAC_DONT:
+      switch (q->l_current)
+      {
+        case Q_YES:
+          telnet_send_option(nvt, IAC_DONT, option);
+          q->l_current = Q_NO;
+          CLOSE_CALLBACK(channel, TELNET_CHANNEL_LOCAL);
+          break;
+        case Q_WANTNO:
+          q->l_current = Q_NO;
+          CLOSE_CALLBACK(channel, TELNET_CHANNEL_LOCAL);
+          break;
+        case Q_WANTNOYES:
+          if (!q->l_lazy)
+            telnet_send_option(nvt, IAC_DO, option);
+          q->l_current = Q_WANTYES;
+          CLOSE_CALLBACK(channel, TELNET_CHANNEL_LOCAL);
+          break;
+        case Q_WANTYES:
+          q->l_current = Q_NO;
+          break;
+        case Q_WANTYESNO:
+          q->l_current = Q_NO;
+          break;
+      }
+      break;
+  }
+}
+
+static void process_data_event(telnet_nvt* nvt,
+                               const telnet_byte* data,
+                               size_t length)
+{
+  telnet_channel* channel = get_current_local(nvt);
+  if (channel)
+    DATA_CALLBACK(channel, TELNET_CHANNEL_EV_DATA, data, length);
+}
+
+static void process_subnegotiation_event(telnet_nvt* nvt,
+                                         int active,
+                                         telnet_byte option)
+{
+  if (active)
+  {
+    set_current_local(nvt, option);
+    telnet_channel* channel = get_current_local(nvt);
+    if (channel)
+      DATA_CALLBACK(channel, TELNET_CHANNEL_EV_BEGIN, NULL, 0);
+  }
+  else
+  {
+    telnet_channel* channel = get_current_local(nvt);
+    if (channel)
+      DATA_CALLBACK(channel, TELNET_CHANNEL_EV_END, NULL, 0);
+    set_current_local(nvt, TELNET_MAIN_CHANNEL);
+  }
+}
+
+static void process_event(telnet_parser* parser, telnet_event* event)
+{
+  telnet_nvt* nvt = NULL;
+  telnet_parser_get_userdata(parser, (void*)&nvt);
+  
+  if (nvt->callback)
+    nvt->callback(nvt, event);
+  
+  switch (event->type)
+  {
+    case TELNET_EV_DATA:
+    {
+      telnet_data_event* ev = (telnet_data_event*)event;
+      process_data_event(nvt, ev->data, ev->length);
+      break;
+    }
+    
+    case TELNET_EV_OPTION:
+    {
+      telnet_option_event* ev = (telnet_option_event*)event;
+      process_option_event(nvt, ev->command, ev->option);
+      break;
+    }
+    
+    case TELNET_EV_SUBNEGOTIATION:
+    {
+      telnet_subnegotiation_event* ev = (telnet_subnegotiation_event*)event;
+      process_subnegotiation_event(nvt, ev->active, ev->option);
+      break;
+    }
+    
+    default:
+      break; // let the user callback handle anything else
+  }
+}
 
 
-#line 137 "src/anachronism.rl"
-
-
-telnet_nvt* telnet_new_nvt()
+telnet_nvt* telnet_nvt_new(telnet_event_callback callback, void* userdata)
 {
   telnet_nvt* nvt = malloc(sizeof(telnet_nvt));
-  if (nvt != NULL)
+  if (nvt)
   {
-    memset(nvt, 0, sizeof(*nvt));
-    
-#line 78 "src/anachronism.c"
-	{
-	 nvt->cs = telnet_parser_start;
-	}
-
-#line 146 "src/anachronism.rl"
+    telnet_parser* parser = telnet_parser_new(&process_event, (void*)nvt);
+    if (parser)
+    {
+      memset(nvt, 0, sizeof(*nvt));
+      nvt->parser = parser;
+      nvt->callback = callback;
+      nvt->userdata = userdata;
+    }
   }
   return nvt;
 }
 
-void telnet_free_nvt(telnet_nvt* nvt)
+void telnet_nvt_free(telnet_nvt* nvt)
 {
-  free(nvt);
-}
-
-telnet_error telnet_get_callbacks(telnet_nvt* nvt, telnet_callbacks** callbacks)
-{
-  if (!nvt)
-    return TELNET_E_BAD_NVT;
-  
-  *callbacks = &nvt->callbacks;
-  return TELNET_E_OK;
-}
-
-telnet_error telnet_set_userdata(telnet_nvt* nvt, void* userdata)
-{
-  if (!nvt)
-    return TELNET_E_BAD_NVT;
-  
-  nvt->userdata = userdata;
-  return TELNET_E_OK;
+  if (nvt)
+  {
+    telnet_parser_free(nvt->parser);
+    free(nvt);
+  }
 }
 
 telnet_error telnet_get_userdata(telnet_nvt* nvt, void** userdata)
@@ -116,352 +307,12 @@ telnet_error telnet_get_userdata(telnet_nvt* nvt, void** userdata)
   return TELNET_E_OK;
 }
 
-telnet_error telnet_recv(telnet_nvt* nvt, const telnet_byte* data, const size_t length, size_t* bytes_used)
+telnet_error telnet_recv(telnet_nvt* nvt, const telnet_byte* data, size_t length, size_t* bytes_used)
 {
   if (!nvt)
     return TELNET_E_BAD_NVT;
   
-  // Only bother saving text if it'll be used
-  if (nvt->callbacks.on_recv)
-  {
-    // Because of how the parser translates data, a run of text is guaranteed to
-    // be at most 'length' characters long. In practice it's usually less, due to
-    // escaped characters (IAC IAC -> IAC) and text separated by commands.
-    nvt->buf = malloc(length * sizeof(*nvt->buf));
-    if (!nvt->buf)
-      return -1; // unable to allocate a buffer
-    nvt->buflen = 0;
-  }
-  
-  nvt->p = data;
-  nvt->pe = data + length;
-  nvt->eof = nvt->pe;
-  
-  
-#line 142 "src/anachronism.c"
-	{
-	if ( ( nvt->p) == ( nvt->pe) )
-		goto _test_eof;
-	switch (  nvt->cs )
-	{
-tr1:
-#line 6 "src/parser_common.rl"
-	{( nvt->p)--;}
-#line 118 "src/anachronism.rl"
-	{
-    if (nvt->callbacks.on_recv && nvt->buf != NULL)
-    {
-      telnet_warning_event ev;
-      EV_WARNING(ev, "Invalid \\r: not followed by \\n or \\0.", ( nvt->p)-data);
-      nvt->callbacks.on_recv(nvt, (telnet_event*)&ev);
-    }
-  }
-#line 64 "src/anachronism.rl"
-	{
-    if (nvt->callbacks.on_recv && nvt->buflen > 0)
-    {
-      telnet_text_event ev;
-      EV_DATA(ev, nvt->buf, nvt->buflen);
-      nvt->callbacks.on_recv(nvt, (telnet_event*)&ev);
-      nvt->buflen = 0;
-    }
-  }
-	goto st8;
-tr2:
-#line 74 "src/anachronism.rl"
-	{
-    if (nvt->callbacks.on_recv && nvt->buf != NULL)
-      nvt->buf[nvt->buflen++] = (*( nvt->p));
-  }
-	goto st8;
-tr3:
-#line 64 "src/anachronism.rl"
-	{
-    if (nvt->callbacks.on_recv && nvt->buflen > 0)
-    {
-      telnet_text_event ev;
-      EV_DATA(ev, nvt->buf, nvt->buflen);
-      nvt->callbacks.on_recv(nvt, (telnet_event*)&ev);
-      nvt->buflen = 0;
-    }
-  }
-#line 79 "src/anachronism.rl"
-	{
-    if (nvt->callbacks.on_recv && nvt->buf != NULL)
-    {
-      telnet_command_event ev;
-      EV_COMMAND(ev, (*( nvt->p)));
-      nvt->callbacks.on_recv(nvt, (telnet_event*)&ev);
-    }
-  }
-	goto st8;
-tr13:
-#line 64 "src/anachronism.rl"
-	{
-    if (nvt->callbacks.on_recv && nvt->buflen > 0)
-    {
-      telnet_text_event ev;
-      EV_DATA(ev, nvt->buf, nvt->buflen);
-      nvt->callbacks.on_recv(nvt, (telnet_event*)&ev);
-      nvt->buflen = 0;
-    }
-  }
-#line 6 "src/parser_common.rl"
-	{( nvt->p)--;}
-#line 126 "src/anachronism.rl"
-	{
-    if (nvt->callbacks.on_recv && nvt->buf != NULL)
-    {
-      telnet_warning_event ev;
-      EV_WARNING(ev, "IAC followed by invalid command.", ( nvt->p)-data);
-      nvt->callbacks.on_recv(nvt, (telnet_event*)&ev);
-    }
-  }
-#line 109 "src/anachronism.rl"
-	{
-    if (nvt->callbacks.on_recv && nvt->buf != NULL)
-    {
-      telnet_subnegotiation_event ev;
-      EV_SUBNEGOTIATION(ev, 0, nvt->option_mark);
-      nvt->callbacks.on_recv(nvt, (telnet_event*)&ev);
-    }
-  }
-	goto st8;
-tr14:
-#line 64 "src/anachronism.rl"
-	{
-    if (nvt->callbacks.on_recv && nvt->buflen > 0)
-    {
-      telnet_text_event ev;
-      EV_DATA(ev, nvt->buf, nvt->buflen);
-      nvt->callbacks.on_recv(nvt, (telnet_event*)&ev);
-      nvt->buflen = 0;
-    }
-  }
-#line 109 "src/anachronism.rl"
-	{
-    if (nvt->callbacks.on_recv && nvt->buf != NULL)
-    {
-      telnet_subnegotiation_event ev;
-      EV_SUBNEGOTIATION(ev, 0, nvt->option_mark);
-      nvt->callbacks.on_recv(nvt, (telnet_event*)&ev);
-    }
-  }
-	goto st8;
-tr15:
-#line 91 "src/anachronism.rl"
-	{
-    if (nvt->callbacks.on_recv && nvt->buf != NULL)
-    {
-      telnet_option_event ev;
-      EV_OPTION(ev, nvt->option_mark, (*( nvt->p)));
-      nvt->callbacks.on_recv(nvt, (telnet_event*)&ev);
-    }
-  }
-	goto st8;
-st8:
-	if ( ++( nvt->p) == ( nvt->pe) )
-		goto _test_eof8;
-case 8:
-#line 267 "src/anachronism.c"
-	switch( (*( nvt->p)) ) {
-		case 13u: goto tr16;
-		case 255u: goto st2;
-	}
-	goto tr2;
-tr16:
-#line 74 "src/anachronism.rl"
-	{
-    if (nvt->callbacks.on_recv && nvt->buf != NULL)
-      nvt->buf[nvt->buflen++] = (*( nvt->p));
-  }
-	goto st1;
-st1:
-	if ( ++( nvt->p) == ( nvt->pe) )
-		goto _test_eof1;
-case 1:
-#line 284 "src/anachronism.c"
-	switch( (*( nvt->p)) ) {
-		case 0u: goto st8;
-		case 10u: goto tr2;
-	}
-	goto tr1;
-st2:
-	if ( ++( nvt->p) == ( nvt->pe) )
-		goto _test_eof2;
-case 2:
-	switch( (*( nvt->p)) ) {
-		case 240u: goto st0;
-		case 250u: goto tr5;
-		case 255u: goto tr2;
-	}
-	if ( 251u <= (*( nvt->p)) && (*( nvt->p)) <= 254u )
-		goto tr6;
-	goto tr3;
-st0:
- nvt->cs = 0;
-	goto _out;
-tr5:
-#line 64 "src/anachronism.rl"
-	{
-    if (nvt->callbacks.on_recv && nvt->buflen > 0)
-    {
-      telnet_text_event ev;
-      EV_DATA(ev, nvt->buf, nvt->buflen);
-      nvt->callbacks.on_recv(nvt, (telnet_event*)&ev);
-      nvt->buflen = 0;
-    }
-  }
-	goto st3;
-st3:
-	if ( ++( nvt->p) == ( nvt->pe) )
-		goto _test_eof3;
-case 3:
-#line 321 "src/anachronism.c"
-	goto tr7;
-tr12:
-#line 6 "src/parser_common.rl"
-	{( nvt->p)--;}
-#line 118 "src/anachronism.rl"
-	{
-    if (nvt->callbacks.on_recv && nvt->buf != NULL)
-    {
-      telnet_warning_event ev;
-      EV_WARNING(ev, "Invalid \\r: not followed by \\n or \\0.", ( nvt->p)-data);
-      nvt->callbacks.on_recv(nvt, (telnet_event*)&ev);
-    }
-  }
-#line 64 "src/anachronism.rl"
-	{
-    if (nvt->callbacks.on_recv && nvt->buflen > 0)
-    {
-      telnet_text_event ev;
-      EV_DATA(ev, nvt->buf, nvt->buflen);
-      nvt->callbacks.on_recv(nvt, (telnet_event*)&ev);
-      nvt->buflen = 0;
-    }
-  }
-	goto st4;
-tr8:
-#line 74 "src/anachronism.rl"
-	{
-    if (nvt->callbacks.on_recv && nvt->buf != NULL)
-      nvt->buf[nvt->buflen++] = (*( nvt->p));
-  }
-	goto st4;
-tr7:
-#line 100 "src/anachronism.rl"
-	{
-    nvt->option_mark = (*( nvt->p));
-    if (nvt->callbacks.on_recv && nvt->buf != NULL)
-    {
-      telnet_subnegotiation_event ev;
-      EV_SUBNEGOTIATION(ev, 1, nvt->option_mark);
-      nvt->callbacks.on_recv(nvt, (telnet_event*)&ev);
-    }
-  }
-	goto st4;
-st4:
-	if ( ++( nvt->p) == ( nvt->pe) )
-		goto _test_eof4;
-case 4:
-#line 369 "src/anachronism.c"
-	switch( (*( nvt->p)) ) {
-		case 13u: goto tr9;
-		case 255u: goto st6;
-	}
-	goto tr8;
-tr9:
-#line 74 "src/anachronism.rl"
-	{
-    if (nvt->callbacks.on_recv && nvt->buf != NULL)
-      nvt->buf[nvt->buflen++] = (*( nvt->p));
-  }
-	goto st5;
-st5:
-	if ( ++( nvt->p) == ( nvt->pe) )
-		goto _test_eof5;
-case 5:
-#line 386 "src/anachronism.c"
-	switch( (*( nvt->p)) ) {
-		case 0u: goto st4;
-		case 10u: goto tr8;
-	}
-	goto tr12;
-st6:
-	if ( ++( nvt->p) == ( nvt->pe) )
-		goto _test_eof6;
-case 6:
-	switch( (*( nvt->p)) ) {
-		case 240u: goto tr14;
-		case 255u: goto tr8;
-	}
-	goto tr13;
-tr6:
-#line 64 "src/anachronism.rl"
-	{
-    if (nvt->callbacks.on_recv && nvt->buflen > 0)
-    {
-      telnet_text_event ev;
-      EV_DATA(ev, nvt->buf, nvt->buflen);
-      nvt->callbacks.on_recv(nvt, (telnet_event*)&ev);
-      nvt->buflen = 0;
-    }
-  }
-#line 88 "src/anachronism.rl"
-	{
-    nvt->option_mark= (*( nvt->p));
-  }
-	goto st7;
-st7:
-	if ( ++( nvt->p) == ( nvt->pe) )
-		goto _test_eof7;
-case 7:
-#line 421 "src/anachronism.c"
-	goto tr15;
-	}
-	_test_eof8:  nvt->cs = 8; goto _test_eof; 
-	_test_eof1:  nvt->cs = 1; goto _test_eof; 
-	_test_eof2:  nvt->cs = 2; goto _test_eof; 
-	_test_eof3:  nvt->cs = 3; goto _test_eof; 
-	_test_eof4:  nvt->cs = 4; goto _test_eof; 
-	_test_eof5:  nvt->cs = 5; goto _test_eof; 
-	_test_eof6:  nvt->cs = 6; goto _test_eof; 
-	_test_eof7:  nvt->cs = 7; goto _test_eof; 
-
-	_test_eof: {}
-	if ( ( nvt->p) == ( nvt->eof) )
-	{
-	switch (  nvt->cs ) {
-	case 8: 
-#line 64 "src/anachronism.rl"
-	{
-    if (nvt->callbacks.on_recv && nvt->buflen > 0)
-    {
-      telnet_text_event ev;
-      EV_DATA(ev, nvt->buf, nvt->buflen);
-      nvt->callbacks.on_recv(nvt, (telnet_event*)&ev);
-      nvt->buflen = 0;
-    }
-  }
-	break;
-#line 449 "src/anachronism.c"
-	}
-	}
-
-	_out: {}
-	}
-
-#line 204 "src/anachronism.rl"
-  
-  if (bytes_used != NULL)
-    *bytes_used = nvt->p - data;
-  
-  free(nvt->buf);
-  nvt->buf = NULL;
-  nvt->p = nvt->pe = nvt->eof = NULL;
-  
-  return TELNET_E_OK;
+  return telnet_parser_parse(nvt->parser, data, length, bytes_used);
 }
 
 telnet_error telnet_halt(telnet_nvt* nvt)
@@ -469,13 +320,8 @@ telnet_error telnet_halt(telnet_nvt* nvt)
   if (!nvt)
     return TELNET_E_BAD_NVT;
   
-  // Force the parser to stop where it's at.
-  if (nvt->p)
-    nvt->eof = nvt->pe = nvt->p + 1;
-  
-  return TELNET_E_OK;
+  return telnet_parser_interrupt(nvt->parser);
 }
-
 
 static int safe_concat(const telnet_byte* in, size_t inlen, telnet_byte* out, size_t outlen)
 {
@@ -546,7 +392,7 @@ telnet_error telnet_send_data(telnet_nvt* nvt, const telnet_byte* data, const si
 {
   if (!nvt)
     return TELNET_E_BAD_NVT;
-  else if (!nvt->callbacks.on_send)
+  else if (!nvt->callback)
     return TELNET_E_OK; // immediate success since they apparently don't want the data to go anywhere
   
   // Due to the nature of the protocol, the most any one byte can be encoded as is two bytes.
@@ -557,7 +403,10 @@ telnet_error telnet_send_data(telnet_nvt* nvt, const telnet_byte* data, const si
     return TELNET_E_ALLOC;
   
   bufsize = telnet_escape(data, length, buf, bufsize);
-  nvt->callbacks.on_send(nvt, buf, bufsize);
+  
+  telnet_send_event event;
+  EV_SEND(event, buf, bufsize);
+  nvt->callback(nvt, (telnet_event*)&event);
   
   free(buf);
   buf = NULL;
@@ -572,12 +421,14 @@ telnet_error telnet_send_command(telnet_nvt* nvt, const telnet_byte command)
   else if (nvt->subnegotiating)
     return TELNET_E_SUBNEGOTIATING;
   else if (command >= IAC_SB || command == IAC_SE) 
-    return TELNET_E_BAD_COMMAND; // Invalid command
+    return TELNET_E_INVALID_COMMAND; // Invalid command
   
-  if (nvt->callbacks.on_send)
+  if (nvt->callback)
   {
     const telnet_byte buf[] = {IAC_IAC, command};
-    nvt->callbacks.on_send(nvt, buf, 2);
+    telnet_send_event event;
+    EV_SEND(event, buf, 2);
+    nvt->callback(nvt, (telnet_event*)&event);
   }
   
   return TELNET_E_OK;
@@ -590,12 +441,14 @@ telnet_error telnet_send_option(telnet_nvt* nvt, const telnet_byte command, cons
   else if (nvt->subnegotiating)
     return TELNET_E_SUBNEGOTIATING;
   else if (command < IAC_WILL || command > IAC_DONT)
-    return TELNET_E_BAD_COMMAND; // Invalid option command
+    return TELNET_E_INVALID_COMMAND; // Invalid option command
   
-  if (nvt->callbacks.on_send)
+  if (nvt->callback)
   {
     const telnet_byte buf[] = {IAC_IAC, command, option};
-    nvt->callbacks.on_send(nvt, buf, 3);
+    telnet_send_event event;
+    EV_SEND(event, buf, 3);
+    nvt->callback(nvt, (telnet_event*)&event);
   }
   
   return TELNET_E_OK;
@@ -608,10 +461,12 @@ telnet_error telnet_send_subnegotiation_start(telnet_nvt* nvt, const telnet_byte
   else if (nvt->subnegotiating)
     return TELNET_E_SUBNEGOTIATING;
   
-  if (nvt->callbacks.on_send)
+  if (nvt->callback)
   {
     const telnet_byte buf[] = {IAC_IAC, IAC_SB, option};
-    nvt->callbacks.on_send(nvt, buf, 3);
+    telnet_send_event event;
+    EV_SEND(event, buf, 3);
+    nvt->callback(nvt, (telnet_event*)&event);
   }
 
   nvt->subnegotiating = 1;
@@ -625,10 +480,12 @@ telnet_error telnet_send_subnegotiation_end(telnet_nvt* nvt)
   else if (!nvt->subnegotiating)
     return TELNET_E_SUBNEGOTIATING;
   
-  if (nvt->callbacks.on_send)
+  if (nvt->callback)
   {
     static const telnet_byte buf[] = {IAC_IAC, IAC_SE};
-    nvt->callbacks.on_send(nvt, buf, 2);
+    telnet_send_event event;
+    EV_SEND(event, buf, 2);
+    nvt->callback(nvt, (telnet_event*)&event);
   }
   
   nvt->subnegotiating = 0;
@@ -641,7 +498,7 @@ telnet_error telnet_send_subnegotiation(telnet_nvt* nvt, const telnet_byte optio
     return TELNET_E_BAD_NVT;
   else if (nvt->subnegotiating)
     return TELNET_E_SUBNEGOTIATING;
-  else if (!nvt->callbacks.on_send)
+  else if (!nvt->callback)
     return TELNET_E_OK;
   
   // length*2 is the maximum buffer size needed for an escaped string.
@@ -662,7 +519,122 @@ telnet_error telnet_send_subnegotiation(telnet_nvt* nvt, const telnet_byte optio
   iac[1] = IAC_SE;
   memcpy(buf+escaped_length, iac, 2);
   
-  nvt->callbacks.on_send(nvt, buf, escaped_length + 2);
+  telnet_send_event event;
+  EV_SEND(event, buf, escaped_length+2);
+  nvt->callback(nvt, (telnet_event*)&event);
+  
+  return TELNET_E_OK;
+}
+
+
+
+telnet_error telnet_channel_register(telnet_channel* channel,
+                                     short option,
+                                     telnet_channel_mode local,
+                                     telnet_channel_mode remote)
+{
+  if (!channel)
+    return TELNET_E_BAD_CHANNEL;
+  else if (channel->option != TELNET_INVALID_CHANNEL)
+    return TELNET_E_REGISTERED;
+  
+  telnet_nvt* nvt = channel->nvt;
+  
+  if (option == TELNET_MAIN_CHANNEL)
+  {
+    if (nvt->primary)
+      return TELNET_E_REGISTERED;
+    
+    nvt->primary = channel;
+    channel->open = 1;
+  }
+  else if (0 <= option && option <= 255)
+  {
+    if (nvt->channels[option])
+      return TELNET_E_REGISTERED;
+    
+    telnet_qstate* q = &nvt->options[option];
+    
+    if (local != TELNET_CHANNEL_OFF)
+    {
+      q->l_current = Q_WANTYES;
+      if (local == TELNET_CHANNEL_LAZY)
+        q->l_lazy = 1;
+      else
+        telnet_send_option(nvt, IAC_WILL, option);
+    }
+    if (remote != TELNET_CHANNEL_OFF)
+    {
+      q->r_current = Q_WANTYES;
+      if (remote == TELNET_CHANNEL_LAZY)
+        q->r_lazy = 1;
+      else
+        telnet_send_option(nvt, IAC_DO, option);
+    }
+    
+    nvt->channels[option] = channel;
+    channel->option = option;
+  }
+  else
+  {
+    return TELNET_E_INVALID_OPTION;
+  }
+  
+  return TELNET_E_OK;
+}
+
+
+telnet_channel* telnet_channel_new(telnet_nvt* nvt,
+                                   telnet_channel_toggle_callback on_toggle,
+                                   telnet_channel_data_callback on_data,
+                                   void* userdata)
+{
+  if (!nvt)
+    return NULL;
+  
+  telnet_channel* channel = malloc(sizeof(telnet_channel));
+  if (channel)
+  {
+    channel->nvt = nvt;
+    channel->option = TELNET_INVALID_CHANNEL;
+    channel->userdata = userdata;
+    channel->open = 0;
+    
+    channel->on_toggle = on_toggle;
+    channel->on_data = on_data;
+  }
+  return channel;
+}
+
+telnet_error telnet_channel_get_userdata(telnet_channel* channel,
+                                         void** userdata)
+{
+  if (!channel)
+    return TELNET_E_BAD_CHANNEL;
+  
+  *userdata = channel->userdata;
+  return TELNET_E_OK;
+}
+
+telnet_error telnet_channel_get_nvt(telnet_channel* channel, telnet_nvt** nvt)
+{
+  if (!channel)
+    return TELNET_E_BAD_CHANNEL;
+  
+  *nvt = channel->nvt;
+  return TELNET_E_OK;
+}
+
+telnet_error telnet_channel_send(telnet_channel* channel,
+                                 const telnet_byte* data,
+                                 size_t length)
+{
+  if (!channel)
+    return TELNET_E_BAD_CHANNEL;
+  else if (!channel->open)
+    return TELNET_E_NOT_OPEN;
+  
+  telnet_send_subnegotiation(channel->nvt, channel->option, data, length);
   
   return TELNET_E_OK;
 }

@@ -6,7 +6,7 @@ CFLAGS = --pedantic -Wall -Wextra -march=native -std=gnu99
 INCLUDE = include/anachronism
 
 VERSION_MAJOR = 0
-VERSION = $(VERSION_MAJOR).1.0
+VERSION = $(VERSION_MAJOR).2.0
 
 SO = libanachronism.so
 SOFILE = $(SO).$(VERSION)
@@ -14,21 +14,26 @@ SONAME = $(SO).$(VERSION_MAJOR)
 
 
 all: static shared
-shared: build/$(SOFILE)
-static: build/libanachronism.a
+shared: build/ build/$(SOFILE)
+static: build/ build/libanachronism.a
 
+build/:
+	mkdir build
 
-build/$(SOFILE): build/nvt.o
-	$(CC) -shared -Wl,-soname,$(SONAME) -o build/$(SOFILE) build/nvt.o
+build/$(SOFILE): build/nvt.o build/parser.o
+	$(CC) -shared -Wl,-soname,$(SONAME) -o build/$(SOFILE) build/nvt.o build/parser.o
 
-build/libanachronism.a: build/nvt.o
-	ar rcs build/libanachronism.a build/nvt.o
+build/libanachronism.a: build/nvt.o build/parser.o
+	ar rcs build/libanachronism.a build/nvt.o build/parser.o
 
-build/nvt.o: src/nvt.c $(INCLUDE)/nvt.h
+build/nvt.o: src/nvt.c $(INCLUDE)/nvt.h $(INCLUDE)/common.h
 	$(CC) $(FLAGS) $(CFLAGS) src/nvt.c -o build/nvt.o
 
-src/nvt.c: src/nvt.rl src/parser_common.rl
-	ragel -C -G2 src/nvt.rl -o src/nvt.c
+build/parser.o: src/parser.c $(INCLUDE)/parser.h $(INCLUDE)/common.h
+	$(CC) $(FLAGS) $(CFLAGS) src/parser.c -o build/parser.o
+
+src/parser.c: src/parser.rl src/parser_common.rl
+	ragel -C -G2 src/parser.rl -o src/parser.c
 
 
 install: all
@@ -47,7 +52,7 @@ uninstall:
 	-rm /usr/local/lib/$(SO)
 
 clean:
-	-rm -f build/nvt.o
+	-rm -f build/nvt.o build/router.o
 
 distclean: clean
 	-rm -f build/libanachronism.a build/$(SOFILE)
