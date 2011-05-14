@@ -182,24 +182,76 @@ telnet_error telnet_send_subnegotiation_end(telnet_nvt* nvt);
 telnet_error telnet_send_subnegotiation(telnet_nvt* nvt, const telnet_byte option, const telnet_byte* data, const size_t length);
 
 
+/**
+  Registers a channel with a Telnet option.
+  
+  If `local` and/or `remote` are TELNET_CHANNEL_ON, immediately negotiates
+  to enable the option.
+  If `local` and/or `remote` are TELNET_CHANNEL_LAZY, negotiations will be
+  accepted if the remote end asks.
+  
+  Errors:
+    TELNET_E_BAD_CHANNEL    - Invalid telnet_channel* parameter.
+    TELNET_E_REGISTERED     - Either the option or the channel is already registered.
+    TELNET_E_INVALID_OPTION - The option is out of range (-1 to 255)
+ */
 telnet_error telnet_channel_register(telnet_channel* channel,
                                      short option,
                                      telnet_channel_mode local,
                                      telnet_channel_mode remote);
 
+/**
+  Creates a new channel with the supplied event callbacks.
+  
+  Errors:
+    TELNET_E_ALLOC - Unable to allocate the telnet_channel.
+ */
 telnet_channel* telnet_channel_new(telnet_nvt* nvt,
                                    telnet_channel_toggle_callback on_toggle,
                                    telnet_channel_data_callback on_data,
                                    void* userdata);
 
+/**
+  Retrieves the userdata stored with the channel.
+  
+  Errors:
+    TELNET_E_BAD_CHANNEL - Invalid telnet_channel* parameter.
+ */
 telnet_error telnet_channel_get_userdata(telnet_channel* channel,
                                          void** userdata);
 
+/**
+  Retrieves the NVT that services this channel.
+  
+  Errors:
+    TELNET_E_BAD_CHANNEL - Invalid telnet_channel* parameter.
+ */
 telnet_error telnet_channel_get_nvt(telnet_channel* channel, telnet_nvt** nvt);
 
+/**
+  Sends a message through this channel to the remote host.
+  
+  Errors:
+    TELNET_E_BAD_CHANNEL             - Invalid telnet_channel* parameter.
+    TELNET_E_BAD_NVT                 - The NVT the channel was created with is invalid.
+    TELNET_E_NOT_OPEN                - The channel has not been negotiated open.
+    TELNET_E_TELNET_E_SUBNEGOTIATING - Unable to begin a subnegotiation while already subnegotiating.
+    TELNET_E_ALLOC                   - Unable to allocate destination buffer for outgoing text.
+ */
 telnet_error telnet_channel_send(telnet_channel* channel,
                                  const telnet_byte* data,
                                  size_t length);
+
+/**
+  Negotiates to enable or disable a channel.
+  
+  Errors:
+    TELNET_E_BAD_CHANNEL - Invalid telnet_channel* parameter.
+    TELNET_E_REGISTERED  - The channel is unregistered or is the main channel.
+ */
+telnet_error telnet_channel_toggle(telnet_channel* channel,
+                                   telnet_channel_provider who,
+                                   telnet_channel_mode what);
 
 #ifdef __cplusplus
 }

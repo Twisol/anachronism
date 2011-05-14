@@ -9,7 +9,7 @@ typedef unsigned char telnet_byte;
 // Error codes returned from API functions
 typedef enum telnet_error
 {
-  TELNET_E_REGISTERED      = -8, // This option already has a registered channel
+  TELNET_E_REGISTERED      = -8, // Issue with current registration status
   TELNET_E_NOT_OPEN        = -7, // Channel isn't open
   TELNET_E_BAD_CHANNEL     = -6, // The telnet_channel* passed is NULL
   TELNET_E_BAD_PARSER      = -5, // The telnet_parser* passed is NULL
@@ -27,6 +27,7 @@ typedef enum telnet_error
  * OPTION: An option request was received. (command, option)
  * SUBNEGOTIATION: A subnegotiation sequence has been initiated/terminated. (active, option)
  * WARNING: A non-fatal invalid sequence was received. (message, position)
+ * SEND: Outgoing data to be sent. (data, length)
  */
 typedef enum telnet_event_type
 {

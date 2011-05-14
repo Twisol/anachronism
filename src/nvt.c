@@ -285,6 +285,11 @@ telnet_nvt* telnet_nvt_new(telnet_event_callback callback, void* userdata)
       nvt->callback = callback;
       nvt->userdata = userdata;
     }
+    else
+    {
+      free(nvt);
+      nvt = NULL;
+    }
   }
   return nvt;
 }
@@ -315,7 +320,7 @@ telnet_error telnet_recv(telnet_nvt* nvt, const telnet_byte* data, size_t length
   return telnet_parser_parse(nvt->parser, data, length, bytes_used);
 }
 
-telnet_error telnet_halt(telnet_nvt* nvt)
+telnet_error telnet_interrupt(telnet_nvt* nvt)
 {
   if (!nvt)
     return TELNET_E_BAD_NVT;
@@ -635,6 +640,108 @@ telnet_error telnet_channel_send(telnet_channel* channel,
     return TELNET_E_NOT_OPEN;
   
   telnet_send_subnegotiation(channel->nvt, channel->option, data, length);
+  
+  return TELNET_E_OK;
+}
+
+telnet_error telnet_channel_toggle(telnet_channel* channel,
+                                   telnet_channel_provider who,
+                                   telnet_channel_mode what)
+{
+  if (!channel)
+    return TELNET_E_BAD_CHANNEL;
+  else if (channel->option == TELNET_INVALID_CHANNEL ||
+           channel->option == TELNET_MAIN_CHANNEL)
+    return TELNET_E_REGISTERED;
+  
+  telnet_nvt* nvt = channel->nvt;
+  telnet_byte option = (telnet_byte)channel->option;
+  telnet_qstate* q =  &nvt->options[option];
+  
+  if (what == TELNET_CHANNEL_OFF)
+  { // Disabling
+    if (who == TELNET_CHANNEL_REMOTE)
+    {
+      switch (q->r_current)
+      {
+        case Q_YES:
+          telnet_send_option(nvt, IAC_DONT, option);
+          q->r_current = Q_WANTNO;
+          break;
+        case Q_WANTNOYES:
+          q->r_current = Q_WANTNO;
+          break;
+        case Q_WANTYES:
+          q->r_current = (q->r_lazy) ? Q_NO : Q_WANTYESNO;
+          break;
+      }
+      q->r_lazy = 0;
+    }
+    else if (who == TELNET_CHANNEL_LOCAL)
+    {
+      switch (q->l_current)
+      {
+        case Q_YES:
+          telnet_send_option(nvt, IAC_WONT, option);
+          q->l_current = Q_WANTNO;
+          break;
+        case Q_WANTNOYES:
+          q->l_current = Q_WANTNO;
+          break;
+        case Q_WANTYES:
+          q->l_current = (q->l_lazy) ? Q_NO : Q_WANTYESNO;
+          break;
+      }
+      q->l_lazy = 0;
+    }
+  }
+  else
+  { // Enabling (maybe lazy)
+    if (who == TELNET_CHANNEL_REMOTE)
+    {
+      switch (q->r_current)
+      {
+        case Q_NO:
+          if (what != TELNET_CHANNEL_LAZY)
+            telnet_send_option(nvt, IAC_DO, option);
+          q->r_current = Q_WANTYES;
+          break;
+        case Q_WANTNO:
+          q->r_current = Q_WANTNOYES;
+          break;
+        case Q_WANTYES:
+          if (q->r_lazy && what != TELNET_CHANNEL_LAZY)
+            telnet_send_option(nvt, IAC_DO, option);
+          break;
+        case Q_WANTYESNO:
+          q->r_current = Q_WANTYES;
+          break;
+      }
+      q->r_lazy = (what == TELNET_CHANNEL_LAZY);
+    }
+    else if (who == TELNET_CHANNEL_LOCAL)
+    {
+      switch (q->l_current)
+      {
+        case Q_NO:
+          if (what != TELNET_CHANNEL_LAZY)
+            telnet_send_option(nvt, IAC_WILL, option);
+          q->l_current = Q_WANTYES;
+          break;
+        case Q_WANTNO:
+          q->l_current = Q_WANTNOYES;
+          break;
+        case Q_WANTYES:
+          if (q->l_lazy && what != TELNET_CHANNEL_LAZY)
+            telnet_send_option(nvt, IAC_WILL, option);
+          break;
+        case Q_WANTYESNO:
+          q->l_current = Q_WANTYES;
+          break;
+      }
+      q->l_lazy = (what == TELNET_CHANNEL_LAZY);
+    }
+  }
   
   return TELNET_E_OK;
 }
