@@ -3,29 +3,29 @@
 #include <anachronism/nvt.h>
 #include <anachronism/parser.h>
 
-#define CLOSE_CALLBACK(channel, who) { \
+#define CLOSE_CALLBACK(channel, who) do { \
   channel->open -= 1; \
   if ((channel)->on_toggle) \
-    (channel)->on_toggle((channel), 0, (who)); \
-}
+    (channel)->on_toggle((channel), TELNET_CHANNEL_OFF, (who)); \
+} while (0)
 
-#define OPEN_CALLBACK(channel, who) { \
+#define OPEN_CALLBACK(channel, who) do { \
   channel->open += 1; \
   if ((channel)->on_toggle) \
-    (channel)->on_toggle((channel), 1, (who)); \
-}
+    (channel)->on_toggle((channel), TELNET_CHANNEL_ON, (who)); \
+} while (0)
 
-#define DATA_CALLBACK(channel, msg, data, length) { \
+#define DATA_CALLBACK(channel, msg, data, length) do { \
   if ((channel)->open > 0 && (channel)->on_data) \
     (channel)->on_data((channel), (msg), (data), (length)); \
-}
+} while (0)
 
 
-#define EV_SEND(ev, text, len) { \
+#define EV_SEND(ev, text, len) do { \
   (ev).SUPER_.type = TELNET_EV_SEND; \
   (ev).data = (text); \
   (ev).length = (len); \
-}
+} while (0)
 
 struct telnet_channel
 {
@@ -279,6 +279,8 @@ telnet_nvt* telnet_nvt_new(telnet_event_callback callback, void* userdata)
       nvt->parser = parser;
       nvt->callback = callback;
       nvt->userdata = userdata;
+      
+      set_current_remote(nvt, TELNET_MAIN_CHANNEL);
     }
     else
     {
@@ -684,6 +686,49 @@ telnet_error telnet_channel_get_option(telnet_channel* channel, short* option)
   return TELNET_E_OK;
 }
 
+telnet_error telnet_channel_get_status(telnet_channel* channel,
+                                       telnet_channel_provider where,
+                                       telnet_channel_mode* on)
+{
+  if (!channel)
+    return TELNET_E_BAD_CHANNEL;
+  
+  if (channel->option == TELNET_MAIN_CHANNEL)
+  {
+    *on = TELNET_CHANNEL_ON;
+  }
+  else
+  {
+    telnet_qstate* q = &channel->nvt->options[channel->option];
+    if (where == TELNET_CHANNEL_REMOTE)
+    {
+      switch (q->l_current)
+      {
+        case Q_YES: case Q_WANTNO: case Q_WANTNOYES:
+          *on = TELNET_CHANNEL_ON;
+          break;
+        default:
+          *on = TELNET_CHANNEL_OFF;
+          break;
+      }
+    }
+    else if (where == TELNET_CHANNEL_LOCAL)
+    {
+      switch (q->r_current)
+      {
+        case Q_YES: case Q_WANTNO: case Q_WANTNOYES:
+          *on = TELNET_CHANNEL_ON;
+          break;
+        default:
+          *on = TELNET_CHANNEL_OFF;
+          break;
+      }
+    }
+  }
+  
+  return TELNET_E_OK;
+}
+
 telnet_error telnet_channel_send(telnet_channel* channel,
                                  const telnet_byte* data,
                                  size_t length)
@@ -699,7 +744,7 @@ telnet_error telnet_channel_send(telnet_channel* channel,
 }
 
 telnet_error telnet_channel_toggle(telnet_channel* channel,
-                                   telnet_channel_provider who,
+                                   telnet_channel_provider where,
                                    telnet_channel_mode what)
 {
   if (!channel)
@@ -713,7 +758,7 @@ telnet_error telnet_channel_toggle(telnet_channel* channel,
   
   if (what == TELNET_CHANNEL_OFF)
   { // Disabling
-    if (who == TELNET_CHANNEL_REMOTE)
+    if (where == TELNET_CHANNEL_REMOTE)
     {
       switch (q->r_current)
       {
@@ -731,7 +776,7 @@ telnet_error telnet_channel_toggle(telnet_channel* channel,
       }
       q->r_lazy = 0;
     }
-    else if (who == TELNET_CHANNEL_LOCAL)
+    else if (where == TELNET_CHANNEL_LOCAL)
     {
       switch (q->l_current)
       {
@@ -752,7 +797,7 @@ telnet_error telnet_channel_toggle(telnet_channel* channel,
   }
   else
   { // Enabling (maybe lazy)
-    if (who == TELNET_CHANNEL_REMOTE)
+    if (where == TELNET_CHANNEL_REMOTE)
     {
       switch (q->r_current)
       {
@@ -774,7 +819,7 @@ telnet_error telnet_channel_toggle(telnet_channel* channel,
       }
       q->r_lazy = (what == TELNET_CHANNEL_LAZY);
     }
-    else if (who == TELNET_CHANNEL_LOCAL)
+    else if (where == TELNET_CHANNEL_LOCAL)
     {
       switch (q->l_current)
       {

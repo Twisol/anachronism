@@ -49,8 +49,8 @@ typedef enum telnet_channel_provider
 
 enum
 {
-  TELNET_MAIN_CHANNEL,
-  TELNET_INVALID_CHANNEL,
+  TELNET_INVALID_CHANNEL = -2,
+  TELNET_MAIN_CHANNEL = -1,
 };
 
 typedef struct telnet_interrupt_code
@@ -66,7 +66,7 @@ typedef struct telnet_channel telnet_channel;
 typedef void (*telnet_event_callback)(telnet_nvt* nvt, telnet_event* event);
                                      
 typedef void (*telnet_channel_toggle_callback)(telnet_channel* channel,
-                                               char open,
+                                               telnet_channel_mode on,
                                                telnet_channel_provider who);
 
 typedef void (*telnet_channel_data_callback)(telnet_channel* channel,
@@ -243,14 +243,24 @@ telnet_error telnet_channel_get_nvt(telnet_channel* channel, telnet_nvt** nvt);
 telnet_error telnet_channel_get_option(telnet_channel* channel, short* option);
 
 /**
+  Retrieves the on/off status of the channel for a given host.
+  
+  Errors:
+    TELNET_E_BAD_CHANNEL - Invalid telnet_channel* parameter.
+ */
+telnet_error telnet_channel_get_status(telnet_channel* channel,
+                                       telnet_channel_provider where,
+                                       telnet_channel_mode* on);
+
+/**
   Sends a message through this channel to the remote host.
   
   Errors:
-    TELNET_E_BAD_CHANNEL             - Invalid telnet_channel* parameter.
-    TELNET_E_BAD_NVT                 - The NVT the channel was created with is invalid.
-    TELNET_E_NOT_OPEN                - The channel has not been negotiated open.
-    TELNET_E_TELNET_E_SUBNEGOTIATING - Unable to begin a subnegotiation while already subnegotiating.
-    TELNET_E_ALLOC                   - Unable to allocate destination buffer for outgoing text.
+    TELNET_E_BAD_CHANNEL    - Invalid telnet_channel* parameter.
+    TELNET_E_BAD_NVT        - The NVT the channel was created with is invalid.
+    TELNET_E_NOT_OPEN       - The channel has not been negotiated open.
+    TELNET_E_SUBNEGOTIATING - Unable to begin a subnegotiation while already subnegotiating.
+    TELNET_E_ALLOC          - Unable to allocate destination buffer for outgoing text.
  */
 telnet_error telnet_channel_send(telnet_channel* channel,
                                  const telnet_byte* data,
@@ -264,7 +274,7 @@ telnet_error telnet_channel_send(telnet_channel* channel,
     TELNET_E_REGISTERED  - The channel is unregistered or is the main channel.
  */
 telnet_error telnet_channel_toggle(telnet_channel* channel,
-                                   telnet_channel_provider who,
+                                   telnet_channel_provider where,
                                    telnet_channel_mode what);
 
 #ifdef __cplusplus

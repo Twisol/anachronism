@@ -6,34 +6,34 @@
 #define BASE_EV(ev, t) \
   (ev).SUPER_.type = TELNET_EV_##t
 
-#define EV_DATA(ev, text, len) {\
+#define EV_DATA(ev, text, len) do {\
   BASE_EV(ev, DATA);\
   (ev).data = (text);\
   (ev).length = (len);\
-}
+} while (0)
 
-#define EV_COMMAND(ev, cmd) {\
+#define EV_COMMAND(ev, cmd) do {\
   BASE_EV(ev, COMMAND);\
   (ev).command = (cmd);\
-}
+} while (0)
 
-#define EV_OPTION(ev, cmd, opt) {\
+#define EV_OPTION(ev, cmd, opt) do {\
   BASE_EV(ev, OPTION);\
   (ev).command = (cmd);\
   (ev).option = (opt);\
-}
+} while (0)
 
-#define EV_SUBNEGOTIATION(ev, act, opt) {\
+#define EV_SUBNEGOTIATION(ev, act, opt) do {\
   BASE_EV(ev, SUBNEGOTIATION);\
   (ev).active = (act);\
   (ev).option = (opt);\
-}
+} while (0)
 
-#define EV_WARNING(ev, msg, pos) {\
+#define EV_WARNING(ev, msg, pos) do {\
   BASE_EV(ev, WARNING);\
   (ev).message = (msg);\
   (ev).position = (pos);\
-}
+} while (0)
 
 struct telnet_parser {
   int cs; /* current Ragel state */
