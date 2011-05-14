@@ -538,18 +538,46 @@ telnet_error telnet_send_subnegotiation(telnet_nvt* nvt, const telnet_byte optio
 }
 
 
+telnet_channel* telnet_channel_new(telnet_channel_toggle_callback on_toggle,
+                                   telnet_channel_data_callback on_data,
+                                   void* userdata)
+{
+  telnet_channel* channel = malloc(sizeof(telnet_channel));
+  if (channel)
+  {
+    memset(channel, 0, sizeof(*channel));
+    
+    channel->option = TELNET_INVALID_CHANNEL;
+    channel->userdata = userdata;
+    channel->open = 0;
+    
+    channel->on_toggle = on_toggle;
+    channel->on_data = on_data;
+  }
+  return channel;
+}
+
+void telnet_channel_free(telnet_channel* channel)
+{
+  if (channel)
+  {
+    telnet_channel_unregister(channel);
+    free(channel);
+  }
+}
 
 telnet_error telnet_channel_register(telnet_channel* channel,
+                                     telnet_nvt* nvt,
                                      short option,
                                      telnet_channel_mode local,
                                      telnet_channel_mode remote)
 {
   if (!channel)
     return TELNET_E_BAD_CHANNEL;
-  else if (channel->option != TELNET_INVALID_CHANNEL)
+  else if (channel->nvt)
     return TELNET_E_REGISTERED;
   
-  telnet_nvt* nvt = channel->nvt;
+  channel->nvt = nvt;
   
   if (option == TELNET_MAIN_CHANNEL)
   {
@@ -598,64 +626,30 @@ telnet_error telnet_channel_unregister(telnet_channel* channel)
 {
   if (!channel)
     return TELNET_E_BAD_CHANNEL;
-  
-  short option = channel->option;
-  if (option == TELNET_INVALID_CHANNEL)
+  else if (!channel->nvt)
     return TELNET_E_OK;
   
   telnet_nvt* nvt = channel->nvt;
+  
+  short option = channel->option;
   if (option != TELNET_MAIN_CHANNEL)
   {
     telnet_channel_toggle(channel, TELNET_CHANNEL_LOCAL, TELNET_CHANNEL_OFF);
     telnet_channel_toggle(channel, TELNET_CHANNEL_REMOTE, TELNET_CHANNEL_OFF);
     
-    telnet_qstate* q = &nvt->options[option];
-    memset(q, 0, sizeof(*q));
+    memset(&nvt->options[option], 0, sizeof(telnet_qstate));
     nvt->channels[option] = NULL;
   }
   else
   {
     nvt->primary = NULL;
+    channel->open = 0;
   }
   
+  channel->nvt = NULL;
   channel->option = TELNET_INVALID_CHANNEL;
-  channel->open = 0;
   
   return TELNET_E_OK;
-}
-
-
-telnet_channel* telnet_channel_new(telnet_nvt* nvt,
-                                   telnet_channel_toggle_callback on_toggle,
-                                   telnet_channel_data_callback on_data,
-                                   void* userdata)
-{
-  if (!nvt)
-    return NULL;
-  
-  telnet_channel* channel = malloc(sizeof(telnet_channel));
-  if (channel)
-  {
-    memset(channel, 0, sizeof(*channel));
-    
-    channel->nvt = nvt;
-    channel->option = TELNET_INVALID_CHANNEL;
-    channel->userdata = userdata;
-    channel->open = 0;
-    
-    channel->on_toggle = on_toggle;
-    channel->on_data = on_data;
-  }
-  return channel;
-}
-
-void telnet_channel_free(telnet_channel* channel)
-{
-  if (channel)
-  {
-    telnet_channel_unregister(channel);
-    free(channel);
-  }
 }
 
 telnet_error telnet_channel_get_userdata(telnet_channel* channel,
@@ -672,6 +666,8 @@ telnet_error telnet_channel_get_nvt(telnet_channel* channel, telnet_nvt** nvt)
 {
   if (!channel)
     return TELNET_E_BAD_CHANNEL;
+  else if (!channel->nvt)
+    return TELNET_E_REGISTERED;
   
   *nvt = channel->nvt;
   return TELNET_E_OK;
@@ -681,6 +677,8 @@ telnet_error telnet_channel_get_option(telnet_channel* channel, short* option)
 {
   if (!channel)
     return TELNET_E_BAD_CHANNEL;
+  else if (!channel->nvt)
+    return TELNET_E_REGISTERED;
   
   *option = channel->option;
   return TELNET_E_OK;
@@ -706,8 +704,7 @@ telnet_error telnet_channel_toggle(telnet_channel* channel,
 {
   if (!channel)
     return TELNET_E_BAD_CHANNEL;
-  else if (channel->option == TELNET_INVALID_CHANNEL ||
-           channel->option == TELNET_MAIN_CHANNEL)
+  else if (!channel->nvt || channel->option == TELNET_MAIN_CHANNEL)
     return TELNET_E_REGISTERED;
   
   telnet_nvt* nvt = channel->nvt;

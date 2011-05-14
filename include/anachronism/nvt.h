@@ -196,6 +196,7 @@ telnet_error telnet_send_subnegotiation(telnet_nvt* nvt, const telnet_byte optio
     TELNET_E_INVALID_OPTION - The option is out of range (-1 to 255)
  */
 telnet_error telnet_channel_register(telnet_channel* channel,
+                                     telnet_nvt* nvt,
                                      short option,
                                      telnet_channel_mode local,
                                      telnet_channel_mode remote);
@@ -208,8 +209,7 @@ telnet_error telnet_channel_unregister(telnet_channel* channel);
   Errors:
     TELNET_E_ALLOC - Unable to allocate the telnet_channel.
  */
-telnet_channel* telnet_channel_new(telnet_nvt* nvt,
-                                   telnet_channel_toggle_callback on_toggle,
+telnet_channel* telnet_channel_new(telnet_channel_toggle_callback on_toggle,
                                    telnet_channel_data_callback on_data,
                                    void* userdata);
 
@@ -229,6 +229,7 @@ telnet_error telnet_channel_get_userdata(telnet_channel* channel,
   
   Errors:
     TELNET_E_BAD_CHANNEL - Invalid telnet_channel* parameter.
+    TELNET_E_REGSITERED  - The channel is not registered with an NVT.
  */
 telnet_error telnet_channel_get_nvt(telnet_channel* channel, telnet_nvt** nvt);
 
@@ -237,6 +238,7 @@ telnet_error telnet_channel_get_nvt(telnet_channel* channel, telnet_nvt** nvt);
   
   Errors:
     TELNET_E_BAD_CHANNEL - Invalid telnet_channel* parameter.
+    TELNET_E_REGISTERED  - The channel is not registered with an NVT.
  */
 telnet_error telnet_channel_get_option(telnet_channel* channel, short* option);
 
