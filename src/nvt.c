@@ -27,6 +27,19 @@
   (ev).length = (len); \
 }
 
+struct telnet_channel
+{
+  telnet_nvt* nvt;
+  short option;
+  void* userdata;
+  unsigned char open;
+  
+  telnet_channel_toggle_callback on_toggle;
+  telnet_channel_data_callback on_data;
+};
+
+// Q Method of Implementing TELNET Option Negotiation
+// ftp://ftp.rfc-editor.org/in-notes/rfc1143.txt
 typedef enum qstate {
   Q_NO = 0,  Q_WANTYES, Q_WANTYESNO,
   Q_YES,     Q_WANTNO, Q_WANTNOYES,
@@ -41,43 +54,33 @@ typedef struct telnet_qstate
   unsigned int l_lazy : 1;
 } telnet_qstate;
 
-struct telnet_channel
-{
-  telnet_nvt* nvt;
-  short option;
-  void* userdata;
-  unsigned char open;
-  
-  telnet_channel_toggle_callback on_toggle;
-  telnet_channel_data_callback on_data;
-};
-
 struct telnet_nvt
 {
   telnet_parser* parser;
-  telnet_qstate options[256]; /* track the state of each subnegotiation option */
-  telnet_channel* channels[256]; /* track all registered channels */
-  telnet_channel* primary; /* the main channel */
+  int subnegotiating;
   
-  short current_local;
+  telnet_qstate options[256]; // track the state of each subnegotiation option
+  telnet_channel* channels[256]; // track all registered channels
+  telnet_channel* primary; // the main channel
+  
   short current_remote;
   
+  telnet_interrupt_code interrupt_code;
   telnet_event_callback callback;
   void* userdata;
-  int subnegotiating;
 };
 
-static telnet_channel* get_current_local(telnet_nvt* nvt)
+static telnet_channel* get_current_remote(telnet_nvt* nvt)
 {
-  if (nvt->current_local == TELNET_MAIN_CHANNEL)
+  if (nvt->current_remote == TELNET_MAIN_CHANNEL)
     return nvt->primary;
   else
-    return nvt->channels[nvt->current_local];
+    return nvt->channels[nvt->current_remote];
 }
 
-static void set_current_local(telnet_nvt* nvt, short channel)
+static void set_current_remote(telnet_nvt* nvt, short option)
 {
-  nvt->current_local = channel;
+  nvt->current_remote = option;
 }
 
 static void process_option_event(telnet_nvt* nvt,
@@ -210,7 +213,7 @@ static void process_data_event(telnet_nvt* nvt,
                                const telnet_byte* data,
                                size_t length)
 {
-  telnet_channel* channel = get_current_local(nvt);
+  telnet_channel* channel = get_current_remote(nvt);
   if (channel)
     DATA_CALLBACK(channel, TELNET_CHANNEL_EV_DATA, data, length);
 }
@@ -221,17 +224,17 @@ static void process_subnegotiation_event(telnet_nvt* nvt,
 {
   if (active)
   {
-    set_current_local(nvt, option);
-    telnet_channel* channel = get_current_local(nvt);
+    set_current_remote(nvt, option);
+    telnet_channel* channel = get_current_remote(nvt);
     if (channel)
       DATA_CALLBACK(channel, TELNET_CHANNEL_EV_BEGIN, NULL, 0);
   }
   else
   {
-    telnet_channel* channel = get_current_local(nvt);
+    telnet_channel* channel = get_current_remote(nvt);
     if (channel)
       DATA_CALLBACK(channel, TELNET_CHANNEL_EV_END, NULL, 0);
-    set_current_local(nvt, TELNET_MAIN_CHANNEL);
+    set_current_remote(nvt, TELNET_MAIN_CHANNEL);
   }
 }
 
@@ -320,12 +323,23 @@ telnet_error telnet_recv(telnet_nvt* nvt, const telnet_byte* data, size_t length
   return telnet_parser_parse(nvt->parser, data, length, bytes_used);
 }
 
-telnet_error telnet_interrupt(telnet_nvt* nvt)
+telnet_error telnet_interrupt(telnet_nvt* nvt, telnet_interrupt_code code)
 {
   if (!nvt)
     return TELNET_E_BAD_NVT;
   
+  nvt->interrupt_code = code;
   return telnet_parser_interrupt(nvt->parser);
+}
+
+telnet_error telnet_get_last_interrupt(telnet_nvt* nvt,
+                                       telnet_interrupt_code* code)
+{
+  if (!nvt)
+    return TELNET_E_BAD_NVT;
+  
+  *code = nvt->interrupt_code;
+  return TELNET_E_OK;
 }
 
 static int safe_concat(const telnet_byte* in, size_t inlen, telnet_byte* out, size_t outlen)
@@ -627,6 +641,15 @@ telnet_error telnet_channel_get_nvt(telnet_channel* channel, telnet_nvt** nvt)
     return TELNET_E_BAD_CHANNEL;
   
   *nvt = channel->nvt;
+  return TELNET_E_OK;
+}
+
+telnet_error telnet_channel_get_option(telnet_channel* channel, short* option)
+{
+  if (!channel)
+    return TELNET_E_BAD_CHANNEL;
+  
+  *option = channel->option;
   return TELNET_E_OK;
 }
 

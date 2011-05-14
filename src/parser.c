@@ -44,13 +44,14 @@ struct telnet_parser {
   telnet_byte option_mark; /* temporary storage for a command byte */
   telnet_byte* buf; /* Buffer to build up a stretch of text in. */
   size_t buflen; /* Length so far of the buffer. */
+  unsigned char interrupted; /* Flag for interrupts */
   
   telnet_parser_callback callback; /* Receiver of Telnet events*/
   void* userdata; /* Context for parser callback */
 };
 
 
-#line 54 "src/parser.c"
+#line 55 "src/parser.c"
 static const int telnet_parser_start = 8;
 static const int telnet_parser_first_final = 8;
 static const int telnet_parser_error = 0;
@@ -58,7 +59,7 @@ static const int telnet_parser_error = 0;
 static const int telnet_parser_en_main = 8;
 
 
-#line 131 "src/parser.rl"
+#line 132 "src/parser.rl"
 
 
 telnet_parser* telnet_parser_new(telnet_parser_callback callback,
@@ -69,12 +70,12 @@ telnet_parser* telnet_parser_new(telnet_parser_callback callback,
   {
     memset(parser, 0, sizeof(*parser));
     
-#line 73 "src/parser.c"
+#line 74 "src/parser.c"
 	{
 	 parser->cs = telnet_parser_start;
 	}
 
-#line 141 "src/parser.rl"
+#line 142 "src/parser.rl"
     parser->callback = callback;
     parser->userdata = userdata;
   }
@@ -103,6 +104,9 @@ telnet_error telnet_parser_parse(telnet_parser* parser,
   if (!parser)
     return TELNET_E_BAD_PARSER;
   
+  // Reset the interrupt flag
+  parser->interrupted = 0;
+  
   // Only bother saving text if it'll be used
   if (parser->callback)
   {
@@ -120,7 +124,7 @@ telnet_error telnet_parser_parse(telnet_parser* parser,
   parser->eof = parser->pe;
   
   
-#line 124 "src/parser.c"
+#line 128 "src/parser.c"
 	{
 	if ( ( parser->p) == ( parser->pe) )
 		goto _test_eof;
@@ -129,7 +133,7 @@ telnet_error telnet_parser_parse(telnet_parser* parser,
 tr1:
 #line 6 "src/parser_common.rl"
 	{( parser->p)--;}
-#line 112 "src/parser.rl"
+#line 113 "src/parser.rl"
 	{
     if (parser->callback && parser->buf != NULL)
     {
@@ -138,7 +142,7 @@ tr1:
       parser->callback(parser, (telnet_event*)&ev);
     }
   }
-#line 58 "src/parser.rl"
+#line 59 "src/parser.rl"
 	{
     if (parser->callback && parser->buflen > 0)
     {
@@ -150,14 +154,14 @@ tr1:
   }
 	goto st8;
 tr2:
-#line 68 "src/parser.rl"
+#line 69 "src/parser.rl"
 	{
     if (parser->callback && parser->buf)
       parser->buf[parser->buflen++] = (*( parser->p));
   }
 	goto st8;
 tr3:
-#line 58 "src/parser.rl"
+#line 59 "src/parser.rl"
 	{
     if (parser->callback && parser->buflen > 0)
     {
@@ -167,7 +171,7 @@ tr3:
       parser->buflen = 0;
     }
   }
-#line 73 "src/parser.rl"
+#line 74 "src/parser.rl"
 	{
     if (parser->callback && parser->buf)
     {
@@ -178,7 +182,7 @@ tr3:
   }
 	goto st8;
 tr13:
-#line 58 "src/parser.rl"
+#line 59 "src/parser.rl"
 	{
     if (parser->callback && parser->buflen > 0)
     {
@@ -190,7 +194,7 @@ tr13:
   }
 #line 6 "src/parser_common.rl"
 	{( parser->p)--;}
-#line 120 "src/parser.rl"
+#line 121 "src/parser.rl"
 	{
     if (parser->callback && parser->buf != NULL)
     {
@@ -199,7 +203,7 @@ tr13:
       parser->callback(parser, (telnet_event*)&ev);
     }
   }
-#line 103 "src/parser.rl"
+#line 104 "src/parser.rl"
 	{
     if (parser->callback && parser->buf != NULL)
     {
@@ -210,7 +214,7 @@ tr13:
   }
 	goto st8;
 tr14:
-#line 58 "src/parser.rl"
+#line 59 "src/parser.rl"
 	{
     if (parser->callback && parser->buflen > 0)
     {
@@ -220,7 +224,7 @@ tr14:
       parser->buflen = 0;
     }
   }
-#line 103 "src/parser.rl"
+#line 104 "src/parser.rl"
 	{
     if (parser->callback && parser->buf != NULL)
     {
@@ -231,7 +235,7 @@ tr14:
   }
 	goto st8;
 tr15:
-#line 85 "src/parser.rl"
+#line 86 "src/parser.rl"
 	{
     if (parser->callback && parser->buf)
     {
@@ -245,14 +249,14 @@ st8:
 	if ( ++( parser->p) == ( parser->pe) )
 		goto _test_eof8;
 case 8:
-#line 249 "src/parser.c"
+#line 253 "src/parser.c"
 	switch( (*( parser->p)) ) {
 		case 13u: goto tr16;
 		case 255u: goto st2;
 	}
 	goto tr2;
 tr16:
-#line 68 "src/parser.rl"
+#line 69 "src/parser.rl"
 	{
     if (parser->callback && parser->buf)
       parser->buf[parser->buflen++] = (*( parser->p));
@@ -262,7 +266,7 @@ st1:
 	if ( ++( parser->p) == ( parser->pe) )
 		goto _test_eof1;
 case 1:
-#line 266 "src/parser.c"
+#line 270 "src/parser.c"
 	switch( (*( parser->p)) ) {
 		case 0u: goto st8;
 		case 10u: goto tr2;
@@ -284,7 +288,7 @@ st0:
  parser->cs = 0;
 	goto _out;
 tr5:
-#line 58 "src/parser.rl"
+#line 59 "src/parser.rl"
 	{
     if (parser->callback && parser->buflen > 0)
     {
@@ -299,12 +303,12 @@ st3:
 	if ( ++( parser->p) == ( parser->pe) )
 		goto _test_eof3;
 case 3:
-#line 303 "src/parser.c"
+#line 307 "src/parser.c"
 	goto tr7;
 tr12:
 #line 6 "src/parser_common.rl"
 	{( parser->p)--;}
-#line 112 "src/parser.rl"
+#line 113 "src/parser.rl"
 	{
     if (parser->callback && parser->buf != NULL)
     {
@@ -313,7 +317,7 @@ tr12:
       parser->callback(parser, (telnet_event*)&ev);
     }
   }
-#line 58 "src/parser.rl"
+#line 59 "src/parser.rl"
 	{
     if (parser->callback && parser->buflen > 0)
     {
@@ -325,14 +329,14 @@ tr12:
   }
 	goto st4;
 tr8:
-#line 68 "src/parser.rl"
+#line 69 "src/parser.rl"
 	{
     if (parser->callback && parser->buf)
       parser->buf[parser->buflen++] = (*( parser->p));
   }
 	goto st4;
 tr7:
-#line 94 "src/parser.rl"
+#line 95 "src/parser.rl"
 	{
     parser->option_mark = (*( parser->p));
     if (parser->callback && parser->buf != NULL)
@@ -347,14 +351,14 @@ st4:
 	if ( ++( parser->p) == ( parser->pe) )
 		goto _test_eof4;
 case 4:
-#line 351 "src/parser.c"
+#line 355 "src/parser.c"
 	switch( (*( parser->p)) ) {
 		case 13u: goto tr9;
 		case 255u: goto st6;
 	}
 	goto tr8;
 tr9:
-#line 68 "src/parser.rl"
+#line 69 "src/parser.rl"
 	{
     if (parser->callback && parser->buf)
       parser->buf[parser->buflen++] = (*( parser->p));
@@ -364,7 +368,7 @@ st5:
 	if ( ++( parser->p) == ( parser->pe) )
 		goto _test_eof5;
 case 5:
-#line 368 "src/parser.c"
+#line 372 "src/parser.c"
 	switch( (*( parser->p)) ) {
 		case 0u: goto st4;
 		case 10u: goto tr8;
@@ -380,7 +384,7 @@ case 6:
 	}
 	goto tr13;
 tr6:
-#line 58 "src/parser.rl"
+#line 59 "src/parser.rl"
 	{
     if (parser->callback && parser->buflen > 0)
     {
@@ -390,7 +394,7 @@ tr6:
       parser->buflen = 0;
     }
   }
-#line 82 "src/parser.rl"
+#line 83 "src/parser.rl"
 	{
     parser->option_mark = (*( parser->p));
   }
@@ -399,7 +403,7 @@ st7:
 	if ( ++( parser->p) == ( parser->pe) )
 		goto _test_eof7;
 case 7:
-#line 403 "src/parser.c"
+#line 407 "src/parser.c"
 	goto tr15;
 	}
 	_test_eof8:  parser->cs = 8; goto _test_eof; 
@@ -416,7 +420,7 @@ case 7:
 	{
 	switch (  parser->cs ) {
 	case 8: 
-#line 58 "src/parser.rl"
+#line 59 "src/parser.rl"
 	{
     if (parser->callback && parser->buflen > 0)
     {
@@ -427,14 +431,14 @@ case 7:
     }
   }
 	break;
-#line 431 "src/parser.c"
+#line 435 "src/parser.c"
 	}
 	}
 
 	_out: {}
 	}
 
-#line 186 "src/parser.rl"
+#line 190 "src/parser.rl"
   
   if (bytes_used != NULL)
     *bytes_used = parser->p - data;
@@ -443,7 +447,7 @@ case 7:
   parser->buf = NULL;
   parser->p = parser->pe = parser->eof = NULL;
   
-  return TELNET_E_OK;
+  return (parser->interrupted) ? TELNET_E_INTERRUPT : TELNET_E_OK;
 }
 
 telnet_error telnet_parser_interrupt(telnet_parser* parser)
@@ -455,5 +459,6 @@ telnet_error telnet_parser_interrupt(telnet_parser* parser)
   if (parser->p)
     parser->eof = parser->pe = parser->p + 1;
   
+  parser->interrupted = 1;
   return TELNET_E_OK;
 }

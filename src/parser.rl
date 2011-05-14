@@ -42,6 +42,7 @@ struct telnet_parser {
   telnet_byte option_mark; /* temporary storage for a command byte */
   telnet_byte* buf; /* Buffer to build up a stretch of text in. */
   size_t buflen; /* Length so far of the buffer. */
+  unsigned char interrupted; /* Flag for interrupts */
   
   telnet_parser_callback callback; /* Receiver of Telnet events*/
   void* userdata; /* Context for parser callback */
@@ -166,6 +167,9 @@ telnet_error telnet_parser_parse(telnet_parser* parser,
   if (!parser)
     return TELNET_E_BAD_PARSER;
   
+  // Reset the interrupt flag
+  parser->interrupted = 0;
+  
   // Only bother saving text if it'll be used
   if (parser->callback)
   {
@@ -191,7 +195,7 @@ telnet_error telnet_parser_parse(telnet_parser* parser,
   parser->buf = NULL;
   parser->p = parser->pe = parser->eof = NULL;
   
-  return TELNET_E_OK;
+  return (parser->interrupted) ? TELNET_E_INTERRUPT : TELNET_E_OK;
 }
 
 telnet_error telnet_parser_interrupt(telnet_parser* parser)
@@ -203,5 +207,6 @@ telnet_error telnet_parser_interrupt(telnet_parser* parser)
   if (parser->p)
     parser->eof = parser->pe = parser->p + 1;
   
+  parser->interrupted = 1;
   return TELNET_E_OK;
 }

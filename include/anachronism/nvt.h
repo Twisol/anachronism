@@ -53,15 +53,11 @@ enum
   TELNET_INVALID_CHANNEL,
 };
 
-/*
-typedef struct telnet_interrupt_code {
-  // [0, 255] are channels, -1 is main, anything else is illegal
-  int option : 9;
-  
-  // option-specific error code
-  unsigned int code : 7;
+typedef struct telnet_interrupt_code
+{
+  short source;
+  char code;
 } telnet_interrupt_code;
-*/
 
 
 typedef struct telnet_nvt telnet_nvt;
@@ -108,20 +104,24 @@ telnet_error telnet_get_userdata(telnet_nvt* nvt, void** udata);
   only useful if you use telnet_halt() in a callback.
   
   Errors:
-    TELNET_E_BAD_NVT - Invalid telnet_nvt* parameter.
-    TELNET_E_ALLOC   - Unable to allocate destination buffer for incoming text.
+    TELNET_E_BAD_NVT   - Invalid telnet_nvt* parameter.
+    TELNET_E_ALLOC     - Unable to allocate destination buffer for incoming text.
+    TELNET_E_INTERRUPT - User code interrupted the parser.
  */
 telnet_error telnet_recv(telnet_nvt* nvt, const telnet_byte* data, size_t length, size_t* bytes_used);
 
 /**
-  If currently parsing (i.e. telnet_recv() is running), halts the parser.
+  If currently parsing (i.e. telnet_recv() is running), interrupts the parser.
   This is useful for things such as MCCP, where a Telnet sequence hails the start of
   data that must be decompressed before being parsed.
   
   Errors:
     TELNET_E_BAD_NVT - Invalid telnet_nvt* parameter.
  */
-telnet_error telnet_halt(telnet_nvt* nvt);
+telnet_error telnet_interrupt(telnet_nvt* nvt, telnet_interrupt_code code);
+
+telnet_error telnet_get_last_interrupt(telnet_nvt* nvt,
+                                       telnet_interrupt_code* code);
 
 
 /**
@@ -227,6 +227,14 @@ telnet_error telnet_channel_get_userdata(telnet_channel* channel,
     TELNET_E_BAD_CHANNEL - Invalid telnet_channel* parameter.
  */
 telnet_error telnet_channel_get_nvt(telnet_channel* channel, telnet_nvt** nvt);
+
+/**
+  Retreives the option that this channel is bound to.
+  
+  Errors:
+    TELNET_E_BAD_CHANNEL - Invalid telnet_channel* parameter.
+ */
+telnet_error telnet_channel_get_option(telnet_channel* channel, short* option);
 
 /**
   Sends a message through this channel to the remote host.

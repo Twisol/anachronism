@@ -9,7 +9,7 @@ typedef unsigned char telnet_byte;
 // Error codes returned from API functions
 typedef enum telnet_error
 {
-  TELNET_E_REGISTERED      = -8, // Issue with current registration status
+  TELNET_E_REGISTERED      = -8, // Issue with current channel registration
   TELNET_E_NOT_OPEN        = -7, // Channel isn't open
   TELNET_E_BAD_CHANNEL     = -6, // The telnet_channel* passed is NULL
   TELNET_E_BAD_PARSER      = -5, // The telnet_parser* passed is NULL
@@ -19,6 +19,7 @@ typedef enum telnet_error
   TELNET_E_SUBNEGOTIATING  = -1, // This operation is not permitted while subnegotiating (or only while subnegotiating)
   TELNET_E_ALLOC           =  0, // Not enough memory to allocate essential library structures
   TELNET_E_OK              =  1, // Huge Success!
+  TELNET_E_INTERRUPT       =  2, // Parser interrupted by user code.
 } telnet_error;
 
 /* Events:
