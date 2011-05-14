@@ -103,12 +103,10 @@ static void process_option_event(telnet_nvt* nvt,
         case Q_WANTNO:
           // error
           q->r_current = Q_NO;
-          CLOSE_CALLBACK(channel, TELNET_CHANNEL_REMOTE);
           break;
         case Q_WANTNOYES:
           // error
           q->r_current = Q_YES;
-          CLOSE_CALLBACK(channel, TELNET_CHANNEL_REMOTE);
           OPEN_CALLBACK(channel, TELNET_CHANNEL_REMOTE);
           break;
         case Q_WANTYES:
@@ -134,13 +132,11 @@ static void process_option_event(telnet_nvt* nvt,
           break;
         case Q_WANTNO:
           q->r_current = Q_NO;
-          CLOSE_CALLBACK(channel, TELNET_CHANNEL_REMOTE);
           break;
         case Q_WANTNOYES:
           if (!q->r_lazy)
             telnet_send_option(nvt, IAC_DO, option);
           q->r_current = Q_WANTYES;
-          CLOSE_CALLBACK(channel, TELNET_CHANNEL_REMOTE);
           break;
         case Q_WANTYES:
           q->r_current = Q_NO;
@@ -159,12 +155,10 @@ static void process_option_event(telnet_nvt* nvt,
         case Q_WANTNO:
           // error
           q->l_current = Q_NO;
-          CLOSE_CALLBACK(channel, TELNET_CHANNEL_LOCAL);
           break;
         case Q_WANTNOYES:
           // error
           q->l_current = Q_YES;
-          CLOSE_CALLBACK(channel, TELNET_CHANNEL_LOCAL);
           OPEN_CALLBACK(channel, TELNET_CHANNEL_LOCAL);
           break;
         case Q_WANTYES:
@@ -190,13 +184,11 @@ static void process_option_event(telnet_nvt* nvt,
           break;
         case Q_WANTNO:
           q->l_current = Q_NO;
-          CLOSE_CALLBACK(channel, TELNET_CHANNEL_LOCAL);
           break;
         case Q_WANTNOYES:
           if (!q->l_lazy)
             telnet_send_option(nvt, IAC_DO, option);
           q->l_current = Q_WANTYES;
-          CLOSE_CALLBACK(channel, TELNET_CHANNEL_LOCAL);
           break;
         case Q_WANTYES:
           q->l_current = Q_NO;
@@ -602,6 +594,36 @@ telnet_error telnet_channel_register(telnet_channel* channel,
   return TELNET_E_OK;
 }
 
+telnet_error telnet_channel_unregister(telnet_channel* channel)
+{
+  if (!channel)
+    return TELNET_E_BAD_CHANNEL;
+  
+  short option = channel->option;
+  if (option == TELNET_INVALID_CHANNEL)
+    return TELNET_E_OK;
+  
+  telnet_nvt* nvt = channel->nvt;
+  if (option != TELNET_MAIN_CHANNEL)
+  {
+    telnet_channel_toggle(channel, TELNET_CHANNEL_LOCAL, TELNET_CHANNEL_OFF);
+    telnet_channel_toggle(channel, TELNET_CHANNEL_REMOTE, TELNET_CHANNEL_OFF);
+    
+    telnet_qstate* q = &nvt->options[option];
+    memset(q, 0, sizeof(*q));
+    nvt->channels[option] = NULL;
+  }
+  else
+  {
+    nvt->primary = NULL;
+  }
+  
+  channel->option = TELNET_INVALID_CHANNEL;
+  channel->open = 0;
+  
+  return TELNET_E_OK;
+}
+
 
 telnet_channel* telnet_channel_new(telnet_nvt* nvt,
                                    telnet_channel_toggle_callback on_toggle,
@@ -614,6 +636,8 @@ telnet_channel* telnet_channel_new(telnet_nvt* nvt,
   telnet_channel* channel = malloc(sizeof(telnet_channel));
   if (channel)
   {
+    memset(channel, 0, sizeof(*channel));
+    
     channel->nvt = nvt;
     channel->option = TELNET_INVALID_CHANNEL;
     channel->userdata = userdata;
@@ -623,6 +647,15 @@ telnet_channel* telnet_channel_new(telnet_nvt* nvt,
     channel->on_data = on_data;
   }
   return channel;
+}
+
+void telnet_channel_free(telnet_channel* channel)
+{
+  if (channel)
+  {
+    telnet_channel_unregister(channel);
+    free(channel);
+  }
 }
 
 telnet_error telnet_channel_get_userdata(telnet_channel* channel,
@@ -689,6 +722,7 @@ telnet_error telnet_channel_toggle(telnet_channel* channel,
       {
         case Q_YES:
           telnet_send_option(nvt, IAC_DONT, option);
+          CLOSE_CALLBACK(channel, TELNET_CHANNEL_REMOTE);
           q->r_current = Q_WANTNO;
           break;
         case Q_WANTNOYES:
@@ -706,6 +740,7 @@ telnet_error telnet_channel_toggle(telnet_channel* channel,
       {
         case Q_YES:
           telnet_send_option(nvt, IAC_WONT, option);
+          CLOSE_CALLBACK(channel, TELNET_CHANNEL_LOCAL);
           q->l_current = Q_WANTNO;
           break;
         case Q_WANTNOYES:

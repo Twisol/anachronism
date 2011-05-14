@@ -200,6 +200,8 @@ telnet_error telnet_channel_register(telnet_channel* channel,
                                      telnet_channel_mode local,
                                      telnet_channel_mode remote);
 
+telnet_error telnet_channel_unregister(telnet_channel* channel);
+
 /**
   Creates a new channel with the supplied event callbacks.
   
@@ -210,6 +212,8 @@ telnet_channel* telnet_channel_new(telnet_nvt* nvt,
                                    telnet_channel_toggle_callback on_toggle,
                                    telnet_channel_data_callback on_data,
                                    void* userdata);
+
+void telnet_channel_free(telnet_channel* channel);
 
 /**
   Retrieves the userdata stored with the channel.
