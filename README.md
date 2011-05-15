@@ -162,7 +162,7 @@ closed.
     TODO: Explain how to interrupt the parser.
 
 ## Alternatives
-* [libtelnet][github-libtelnet], by Elanthis
+* [libtelnet][github-libtelnet], by Elanthis<br>
   It incorporates a number of (rather MUD-specific) protocols by default,
   and/but lacks the channels paradigm.
 
