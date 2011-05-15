@@ -30,7 +30,7 @@ run `ldconfig` to make Anachronism available to your project's compiler/linker.
 The anachronism/nvt.h header can be consulted for more complete documentation.
 
 ### Basic usage
-The core type exposed by Anachronism is the telnet_nvt, which represents the
+The core type exposed by Anachronism is the telnet\_nvt, which represents the
 Telnet RFC's "Network Virtual Terminal". An NVT is created using
 telnet\_nvt\_new(). When creating an NVT, you must provide it with a callback to
 send events to, and an optional void\* to store as the event handler's context.
@@ -162,9 +162,11 @@ closed.
     TODO: Explain how to interrupt the parser.
 
 ## Alternatives
-* [libtelnet][github-libtelnet], by Elanthis
+* [libtelnet][github-libtelnet], by Elanthis<br>
   It incorporates a number of (rather MUD-specific) protocols by default,
   and/but lacks the channels paradigm.
+
+[github-libtelnet]: https://github.com/elanthis/libtelnet (libtelnet on GitHub)
 
 ## Credits
 Someone from #startups on Freenode IRC suggested the name (I'm sure as a joke).
