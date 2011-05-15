@@ -166,6 +166,8 @@ closed.
   It incorporates a number of (rather MUD-specific) protocols by default,
   and/but lacks the channels paradigm.
 
+[github-libtelnet]: https://github.com/elanthis/libtelnet (libtelnet on GitHub)
+
 ## Credits
 Someone from #startups on Freenode IRC suggested the name (I'm sure as a joke).
 If you read this, remind me who you are so I can credit you properly!
