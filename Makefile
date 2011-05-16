@@ -36,8 +36,10 @@ src/parser.c: src/parser.rl src/parser_common.rl
 	ragel -C -G2 src/parser.rl -o src/parser.c
 
 
-graph: src/parser.rl src/parser_common.rl
-	ragel -V -p src/parser.rl | dot -Tpng > parser.png
+graph: doc/parser.png
+
+doc/parser.png: src/parser.rl src/parser_common.rl
+	ragel -V -p src/parser.rl | dot -Tpng > doc/parser.png
 
 install: all
 	install -D -d /usr/local/include/anachronism/ /usr/local/lib
