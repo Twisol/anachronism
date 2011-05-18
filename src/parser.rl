@@ -40,8 +40,6 @@ struct telnet_parser {
   const telnet_byte* eof; /* end-of-file marker */
   
   telnet_byte option_mark; /* temporary storage for a command byte */
-  telnet_byte* buf; /* Buffer to build up a stretch of text in. */
-  size_t buflen; /* Length so far of the buffer. */
   unsigned char interrupted; /* Flag for interrupts */
   
   telnet_parser_callback callback; /* Receiver of Telnet events*/
@@ -57,22 +55,22 @@ struct telnet_parser {
   variable eof parser->eof;
   
   action flush_text {
-    if (parser->callback && parser->buflen > 0)
+    if (parser->callback && buflen > 0)
     {
       telnet_data_event ev;
-      EV_DATA(ev, parser->buf, parser->buflen);
+      EV_DATA(ev, buf, buflen);
       parser->callback(parser, (telnet_event*)&ev);
-      parser->buflen = 0;
+      buflen = 0;
     }
   }
   
   action char {
-    if (parser->callback && parser->buf)
-      parser->buf[parser->buflen++] = fc;
+    if (parser->callback && buf)
+      buf[buflen++] = fc;
   }
   
   action basic_command {
-    if (parser->callback && parser->buf)
+    if (parser->callback && buf)
     {
       telnet_command_event ev;
       EV_COMMAND(ev, fc);
@@ -84,7 +82,7 @@ struct telnet_parser {
     parser->option_mark = fc;
   }
   action option_command {
-    if (parser->callback && parser->buf)
+    if (parser->callback && buf)
     {
       telnet_option_event ev;
       EV_OPTION(ev, parser->option_mark, fc);
@@ -94,7 +92,7 @@ struct telnet_parser {
 
   action subneg_command {
     parser->option_mark = fc;
-    if (parser->callback && parser->buf != NULL)
+    if (parser->callback && buf != NULL)
     {
       telnet_subnegotiation_event ev;
       EV_SUBNEGOTIATION(ev, 1, parser->option_mark);
@@ -102,7 +100,7 @@ struct telnet_parser {
     }
   }
   action subneg_command_end {
-    if (parser->callback && parser->buf != NULL)
+    if (parser->callback && buf != NULL)
     {
       telnet_subnegotiation_event ev;
       EV_SUBNEGOTIATION(ev, 0, parser->option_mark);
@@ -111,7 +109,7 @@ struct telnet_parser {
   }
 
   action warning_cr {
-    if (parser->callback && parser->buf != NULL)
+    if (parser->callback && buf != NULL)
     {
       telnet_warning_event ev;
       EV_WARNING(ev, "Invalid \\r: not followed by \\n or \\0.", fpc-data);
@@ -119,7 +117,7 @@ struct telnet_parser {
     }
   }
   action warning_iac {
-    if (parser->callback && parser->buf != NULL)
+    if (parser->callback && buf != NULL)
     {
       telnet_warning_event ev;
       EV_WARNING(ev, "IAC followed by invalid command.", fpc-data);
@@ -171,15 +169,16 @@ telnet_error telnet_parser_parse(telnet_parser* parser,
   parser->interrupted = 0;
   
   // Only bother saving text if it'll be used
+  telnet_byte* buf = NULL;
+  size_t buflen = 0;
   if (parser->callback)
   {
     // Because of how the parser translates data, a run of text is guaranteed to
     // be at most 'length' characters long. In practice it's usually less, due to
     // escaped characters (IAC IAC -> IAC) and text separated by commands.
-    parser->buf = malloc(length * sizeof(*parser->buf));
-    if (!parser->buf)
+    buf = malloc(length * sizeof(*buf));
+    if (!buf)
       return TELNET_E_ALLOC;
-    parser->buflen = 0;
   }
   
   parser->p = data;
@@ -191,8 +190,8 @@ telnet_error telnet_parser_parse(telnet_parser* parser,
   if (bytes_used != NULL)
     *bytes_used = parser->p - data;
   
-  free(parser->buf);
-  parser->buf = NULL;
+  free(buf);
+  buf = NULL;
   parser->p = parser->pe = parser->eof = NULL;
   
   return (parser->interrupted) ? TELNET_E_INTERRUPT : TELNET_E_OK;

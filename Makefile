@@ -6,7 +6,7 @@ CFLAGS = --pedantic -Wall -Wextra -march=native -std=gnu99
 INCLUDE = include/anachronism
 
 VERSION_MAJOR = 0
-VERSION = $(VERSION_MAJOR).2.0
+VERSION = $(VERSION_MAJOR).2.1
 
 SO = libanachronism.so
 SOFILE = $(SO).$(VERSION)

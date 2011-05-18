@@ -35,7 +35,7 @@
   # Sorting the above IAC commands by type:
   iac_option_type  = WILL | WONT | DO | DONT;
   iac_subneg_type  = SB;
-  iac_command_type = ^(iac_option_type | iac_subneg_type | IAC | SE);
+  iac_command_type = ^(iac_option_type | iac_subneg_type | IAC);
   
   ###
   # Plain text

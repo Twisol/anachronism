@@ -536,6 +536,9 @@ telnet_error telnet_send_subnegotiation(telnet_nvt* nvt, const telnet_byte optio
   EV_SEND(event, buf, escaped_length+2);
   nvt->callback(nvt, (telnet_event*)&event);
   
+  free(buf);
+  buf = NULL;
+  
   return TELNET_E_OK;
 }
 

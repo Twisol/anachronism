@@ -7,6 +7,7 @@ extern "C" {
 
 #include <anachronism/common.h>
 
+// predefined Telnet commands from 240-255
 enum
 {
   IAC_SE = 240,
@@ -47,6 +48,10 @@ typedef enum telnet_channel_provider
   TELNET_CHANNEL_REMOTE,
 } telnet_channel_provider;
 
+
+// All channels take up 0-255.
+// The MAIN channel is defined to be -1.
+// INVALID is a sentinel value for an invalid/unregistered channel.
 enum
 {
   TELNET_INVALID_CHANNEL = -2,

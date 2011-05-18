@@ -7,6 +7,9 @@
 typedef unsigned char telnet_byte;
 
 // Error codes returned from API functions
+// Positive codes are success/notice codes.
+// Nonpositive codes are errors.
+// ALLOC is 0 for parity with the NULL result from malloc().
 typedef enum telnet_error
 {
   TELNET_E_REGISTERED      = -8, // Issue with current channel registration
