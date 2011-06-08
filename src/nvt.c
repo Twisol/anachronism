@@ -187,7 +187,7 @@ static void process_option_event(telnet_nvt* nvt,
           break;
         case Q_WANTNOYES:
           if (!q->l_lazy)
-            telnet_send_option(nvt, IAC_DO, option);
+            telnet_send_option(nvt, IAC_WILL, option);
           q->l_current = Q_WANTYES;
           break;
         case Q_WANTYES:
