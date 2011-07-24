@@ -76,7 +76,7 @@ and the telnet\_send\_\*() set of functions to emit outgoing data.
       return 0;
     }
 
-### Channels
+### Telopts
 Anachronism provides an easy-to-use interface to Telnet's "telopt" functionality
 via the telnet\_telopt\_*() set of functions. As telopts are negotiated and
 utilized, events are sent to the telopt callback provided to telnet_nvt_new().
