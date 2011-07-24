@@ -6,7 +6,7 @@ CFLAGS = --pedantic -Wall -Wextra -march=native -std=gnu99
 INCLUDE = include/anachronism
 
 VERSION_MAJOR = 0
-VERSION = $(VERSION_MAJOR).2.2
+VERSION = $(VERSION_MAJOR).3.0
 
 SO = libanachronism.so
 SOFILE = $(SO).$(VERSION)
@@ -57,7 +57,7 @@ uninstall:
 	-rm /usr/local/lib/$(SO)
 
 clean:
-	-rm -f build/nvt.o build/router.o
+	-rm -f build/nvt.o build/router.o build/parser.o
 
 distclean: clean
 	-rm -f build/libanachronism.a build/$(SOFILE)

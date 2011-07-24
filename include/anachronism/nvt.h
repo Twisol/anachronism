@@ -28,56 +28,108 @@ enum
   IAC_IAC,
 };
 
-typedef enum telnet_channel_mode
+typedef enum telnet_telopt_mode
 {
   TELNET_CHANNEL_OFF,
   TELNET_CHANNEL_ON,
   TELNET_CHANNEL_LAZY,
-} telnet_channel_mode;
+} telnet_telopt_mode;
 
-typedef enum telnet_channel_event
-{
-  TELNET_CHANNEL_EV_BEGIN,
-  TELNET_CHANNEL_EV_END,
-  TELNET_CHANNEL_EV_DATA,
-} telnet_channel_event;
-
-typedef enum telnet_channel_provider
+typedef enum telnet_telopt_location
 {
   TELNET_CHANNEL_LOCAL,
   TELNET_CHANNEL_REMOTE,
-} telnet_channel_provider;
+} telnet_telopt_location;
 
 
-// All channels take up 0-255.
-// The MAIN channel is defined to be -1.
-// INVALID is a sentinel value for an invalid/unregistered channel.
-enum
+/**
+ * NVT Events
+ */
+ 
+typedef enum telnet_event_type
 {
-  TELNET_INVALID_CHANNEL = -2,
-  TELNET_MAIN_CHANNEL = -1,
-};
+  TELNET_EV_DATA,    /* A stretch of plain data was received. (data, length) */
+  TELNET_EV_COMMAND, /* A simple IAC comamnd was recevied. (command) */
+  TELNET_EV_WARNING, /* A non-fatal invalid sequence was received. (message, position) */
+  TELNET_EV_SEND,    /* Outgoing data to be sent. (data, length) */
+} telnet_event_type;
 
-typedef struct telnet_interrupt_code
+typedef struct telnet_event
 {
-  short source;
-  char code;
-} telnet_interrupt_code;
+  telnet_event_type type;
+} telnet_event;
+
+typedef struct telnet_data_event
+{
+  telnet_event SUPER_;
+  const telnet_byte* data;
+  size_t length;
+} telnet_data_event;
+
+typedef struct telnet_command_event
+{
+  telnet_event SUPER_;
+  telnet_byte command;
+} telnet_command_event;
+
+typedef struct telnet_warning_event
+{
+  telnet_event SUPER_;
+  const char* message;
+  size_t position;
+} telnet_warning_event;
+
+typedef struct telnet_send_event
+{
+  telnet_event SUPER_;
+  const telnet_byte* data;
+  size_t length;
+} telnet_send_event;
+
+
+/**
+ * Telopt Events
+ */
+
+typedef enum telnet_telopt_event_type
+{
+  TELNET_EV_TELOPT_TOGGLE,
+  TELNET_EV_TELOPT_FOCUS,
+  TELNET_EV_TELOPT_DATA,
+} telnet_telopt_event_type;
+
+typedef struct telnet_telopt_event
+{
+  telnet_telopt_event_type type;
+} telnet_telopt_event;
+
+typedef struct telnet_telopt_toggle_event
+{
+  telnet_telopt_event SUPER_;
+  telnet_telopt_location where;
+  telnet_telopt_mode status;
+} telnet_telopt_toggle_event;
+
+typedef struct telnet_telopt_focus_event
+{
+  telnet_telopt_event SUPER_;
+  unsigned char focus;
+} telnet_telopt_focus_event;
+
+typedef struct telnet_telopt_data_event
+{
+  telnet_telopt_event SUPER_;
+  const telnet_byte* data;
+  size_t length;
+} telnet_telopt_data_event;
+
 
 
 typedef struct telnet_nvt telnet_nvt;
-typedef struct telnet_channel telnet_channel;
 
-typedef void (*telnet_event_callback)(telnet_nvt* nvt, telnet_event* event);
-                                     
-typedef void (*telnet_channel_toggle_callback)(telnet_channel* channel,
-                                               telnet_channel_mode on,
-                                               telnet_channel_provider who);
 
-typedef void (*telnet_channel_data_callback)(telnet_channel* channel,
-                                             telnet_channel_event type,
-                                             const telnet_byte* data,
-                                             size_t length);
+typedef void (*telnet_nvt_event_callback)(telnet_nvt* nvt, telnet_event* event);
+typedef void (*telnet_telopt_event_callback)(telnet_nvt* nvt, telnet_byte telopt, telnet_telopt_event* event);
 
 /**
   Creates a new Telnet NVT.
@@ -85,8 +137,10 @@ typedef void (*telnet_channel_data_callback)(telnet_channel* channel,
   Errors:
     TELNET_E_ALLOC - Unable to allocate enough memory for the NVT.
  */
-telnet_nvt* telnet_nvt_new(telnet_event_callback callback, void* userdata);
- 
+telnet_nvt* telnet_nvt_new(telnet_nvt_event_callback nvt_callback,
+                           telnet_telopt_event_callback telopt_callback,
+                           void* userdata);
+
 void telnet_nvt_free(telnet_nvt* nvt);
 
 /**
@@ -104,16 +158,16 @@ void telnet_nvt_free(telnet_nvt* nvt);
 telnet_error telnet_get_userdata(telnet_nvt* nvt, void** udata);
 
 /**
-  Processes incoming data. The on_recv callback, if set, may be invoked during processing.
-  If `bytes_used` is set, it contains the length of the string that was read. This is generally
-  only useful if you use telnet_halt() in a callback.
+  Processes incoming data.
+  If `bytes_used` is non-NULL, it will be set to the length of the string that
+  was read. This is generally only useful if you use telnet_halt() in a callback.
   
   Errors:
     TELNET_E_BAD_NVT   - Invalid telnet_nvt* parameter.
     TELNET_E_ALLOC     - Unable to allocate destination buffer for incoming text.
     TELNET_E_INTERRUPT - User code interrupted the parser.
  */
-telnet_error telnet_recv(telnet_nvt* nvt, const telnet_byte* data, size_t length, size_t* bytes_used);
+telnet_error telnet_receive(telnet_nvt* nvt, const telnet_byte* data, size_t length, size_t* bytes_used);
 
 /**
   If currently parsing (i.e. telnet_recv() is running), interrupts the parser.
@@ -123,10 +177,7 @@ telnet_error telnet_recv(telnet_nvt* nvt, const telnet_byte* data, size_t length
   Errors:
     TELNET_E_BAD_NVT - Invalid telnet_nvt* parameter.
  */
-telnet_error telnet_interrupt(telnet_nvt* nvt, telnet_interrupt_code code);
-
-telnet_error telnet_get_last_interrupt(telnet_nvt* nvt,
-                                       telnet_interrupt_code* code);
+telnet_error telnet_interrupt(telnet_nvt* nvt);
 
 
 /**
@@ -143,144 +194,26 @@ telnet_error telnet_send_data(telnet_nvt* nvt, const telnet_byte* data, const si
   
   Errors:
     TELNET_E_BAD_NVT        - Invalid telnet_nvt* parameter.
-    TELNET_E_SUBNEGOTIATING - Unable to send a command while subnegotiating.
     TELNET_E_BAD_COMMAND    - The command cannot be WILL, WONT, DO, DONT, SB, or SE.
  */
 telnet_error telnet_send_command(telnet_nvt* nvt, const telnet_byte command);
 
 /**
-  Sends a Telnet option negotiation.
+  Sends a subnegotiation packet.
   
   Errors:
     TELNET_E_BAD_NVT        - Invalid telnet_nvt* parameter.
-    TELNET_E_SUBNEGOTIATING - Unable to send an option while subnegotiating.
-    TELNET_E_BAD_COMMAND    - The command must be WILL, WONT, DO, or DONT.
- */
-telnet_error telnet_send_option(telnet_nvt* nvt, const telnet_byte command, const telnet_byte option);
-
-/**
-  Sends a subnegotiation entry sequence
-  
-  Errors:
-    TELNET_E_BAD_NVT        - Invalid telnet_nvt* parameter.
-    TELNET_E_SUBNEGOTIATING - Unable to begin a subnegotiation while already subnegotiating.
- */
-telnet_error telnet_send_subnegotiation_start(telnet_nvt* nvt, const telnet_byte option);
-
-/**
-  Ends an open subnegotiation.
-  
-  Errors:
-    TELNET_E_BAD_NVT        - Invalid telnet_nvt* parameter.
-    TELNET_E_SUBNEGOTIATING - There is no open subnegotiation to close.
- */
-telnet_error telnet_send_subnegotiation_end(telnet_nvt* nvt);
-
-/**
-  Sends a string as the whole body of a subnegotiation. Equivalent to send_subnegotiation_start, send_data, and send_subnegotiation_end in sequence.
-  
-  Errors:
-    TELNET_E_BAD_NVT        - Invalid telnet_nvt* parameter.
-    TELNET_E_SUBNEGOTIATING - Unable to begin a subnegotiation while already subnegotiating.
     TELNET_E_ALLOC          - Unable to allocate destination buffer for outgoing text.
  */
 telnet_error telnet_send_subnegotiation(telnet_nvt* nvt, const telnet_byte option, const telnet_byte* data, const size_t length);
 
 
-/**
-  Registers a channel with a Telnet option.
-  
-  If `local` and/or `remote` are TELNET_CHANNEL_ON, immediately negotiates
-  to enable the option.
-  If `local` and/or `remote` are TELNET_CHANNEL_LAZY, negotiations will be
-  accepted if the remote end asks.
-  
-  Errors:
-    TELNET_E_BAD_CHANNEL    - Invalid telnet_channel* parameter.
-    TELNET_E_REGISTERED     - Either the option or the channel is already registered.
-    TELNET_E_INVALID_OPTION - The option is out of range (-1 to 255)
- */
-telnet_error telnet_channel_register(telnet_channel* channel,
-                                     telnet_nvt* nvt,
-                                     short option,
-                                     telnet_channel_mode local,
-                                     telnet_channel_mode remote);
-
-telnet_error telnet_channel_unregister(telnet_channel* channel);
-
-/**
-  Creates a new channel with the supplied event callbacks.
-  
-  Errors:
-    TELNET_E_ALLOC - Unable to allocate the telnet_channel.
- */
-telnet_channel* telnet_channel_new(telnet_channel_toggle_callback on_toggle,
-                                   telnet_channel_data_callback on_data,
-                                   void* userdata);
-
-void telnet_channel_free(telnet_channel* channel);
-
-/**
-  Retrieves the userdata stored with the channel.
-  
-  Errors:
-    TELNET_E_BAD_CHANNEL - Invalid telnet_channel* parameter.
- */
-telnet_error telnet_channel_get_userdata(telnet_channel* channel,
-                                         void** userdata);
-
-/**
-  Retrieves the NVT that services this channel.
-  
-  Errors:
-    TELNET_E_BAD_CHANNEL - Invalid telnet_channel* parameter.
-    TELNET_E_REGSITERED  - The channel is not registered with an NVT.
- */
-telnet_error telnet_channel_get_nvt(telnet_channel* channel, telnet_nvt** nvt);
-
-/**
-  Retreives the option that this channel is bound to.
-  
-  Errors:
-    TELNET_E_BAD_CHANNEL - Invalid telnet_channel* parameter.
-    TELNET_E_REGISTERED  - The channel is not registered with an NVT.
- */
-telnet_error telnet_channel_get_option(telnet_channel* channel, short* option);
-
-/**
-  Retrieves the on/off status of the channel for a given host.
-  
-  Errors:
-    TELNET_E_BAD_CHANNEL - Invalid telnet_channel* parameter.
- */
-telnet_error telnet_channel_get_status(telnet_channel* channel,
-                                       telnet_channel_provider where,
-                                       telnet_channel_mode* on);
-
-/**
-  Sends a message through this channel to the remote host.
-  
-  Errors:
-    TELNET_E_BAD_CHANNEL    - Invalid telnet_channel* parameter.
-    TELNET_E_BAD_NVT        - The NVT the channel was created with is invalid.
-    TELNET_E_NOT_OPEN       - The channel has not been negotiated open.
-    TELNET_E_SUBNEGOTIATING - Unable to begin a subnegotiation while already subnegotiating.
-    TELNET_E_ALLOC          - Unable to allocate destination buffer for outgoing text.
- */
-telnet_error telnet_channel_send(telnet_channel* channel,
-                                 const telnet_byte* data,
-                                 size_t length);
-
-/**
-  Negotiates to enable or disable a channel.
-  
-  Errors:
-    TELNET_E_BAD_CHANNEL - Invalid telnet_channel* parameter.
-    TELNET_E_REGISTERED  - The channel is unregistered or is the main channel.
- */
-telnet_error telnet_channel_toggle(telnet_channel* channel,
-                                   telnet_channel_provider where,
-                                   telnet_channel_mode what);
+telnet_error telnet_telopt_enable_local(telnet_nvt* nvt, const telnet_byte telopt, unsigned char lazy);
+telnet_error telnet_telopt_enable_remote(telnet_nvt* nvt, const telnet_byte telopt, unsigned char lazy);
+telnet_error telnet_telopt_disable_local(telnet_nvt* nvt, const telnet_byte telopt);
+telnet_error telnet_telopt_disable_remote(telnet_nvt* nvt, const telnet_byte telopt);
+telnet_error telnet_telopt_status_local(telnet_nvt* nvt, const telnet_byte telopt, telnet_telopt_mode* status);
+telnet_error telnet_telopt_status_remote(telnet_nvt* nvt, const telnet_byte telopt, telnet_telopt_mode* status);
 
 #ifdef __cplusplus
 }

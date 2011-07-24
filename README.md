@@ -32,10 +32,10 @@ The anachronism/nvt.h header can be consulted for more complete documentation.
 ### Basic usage
 The core type exposed by Anachronism is the telnet\_nvt, which represents the
 Telnet RFC's "Network Virtual Terminal". An NVT is created using
-telnet\_nvt\_new(). When creating an NVT, you must provide it with a callback to
-send events to, and an optional void\* to store as the event handler's context.
-You can use telnet\_recv() to process incoming data, and the telnet\_send\_\*() set
-of functions to emit outgoing data.
+telnet\_nvt\_new(). When creating an NVT, you must provide it with a pair of
+callbacks to send events to, and an optional void\* to store as the
+event handler's context. You can use telnet\_recv() to process incoming data,
+and the telnet\_send\_\*() set of functions to emit outgoing data.
 
     #include <stdio.h>
     #include <anachronism/nvt.h>
@@ -65,11 +65,11 @@ of functions to emit outgoing data.
     int main()
     {
       // Create an NVT
-      telnet_nvt* nvt = telnet_nvt_new(&on_event, NULL);
+      telnet_nvt* nvt = telnet_nvt_new(&on_event, NULL, NULL);
       
       // Process some incoming data
       const char* data = "foo bar baz";
-      telnet_recv(nvt, (const telnet_byte*)data, strlen(data), NULL);
+      telnet_receive(nvt, (const telnet_byte*)data, strlen(data), NULL);
       
       // Free the NVT
       telnet_nvt_free(nvt);
@@ -77,18 +77,9 @@ of functions to emit outgoing data.
     }
 
 ### Channels
-Anachronism provides an abstraction of "channels" on top of the Telnet protocol,
-treating Telnet as a data multiplexer. There is one "main" channel that is
-always present, and 256 other channels that must be negotiated open. You can
-register event handlers to these channels using telnet\_channel\_new() and
-telnet\_channel\_register().
-
-As channels may be negotiated two ways (once with the local side "serving" the
-underlying Telnet option, and once with the remote side "serving"), you must
-specify which directions you will allow to be opened. TELNET\_CHANNEL\_ON will
-immediately attempt to open the channel, and TELNET\_CHANNEL\_LAZY will wait until
-the remote side asks to open it. TELNET\_CHANNEL\_OFF will keep the channel
-closed.
+Anachronism provides an easy-to-use interface to Telnet's "telopt" functionality
+via the telnet\_telopt\_*() set of functions. As telopts are negotiated and
+utilized, events are sent to the telopt callback provided to telnet_nvt_new().
 
     #include <stdio.h>
     #include <anachronism/nvt.h>
@@ -107,51 +98,45 @@ closed.
       }
     }
     
-    void on_channel_toggle(telnet_channel* channel,
-                           telnet_channel_mode on,
-                           telnet_channel_provider who)
+    void on_telopt_event(telnet_nvt* nvt, telnet_byte telopt, telnet_telopt_event* event)
     {
-      // `on` says whether the channel has been opened or closed
-      // `who` is TELNET_CHANNEL_LOCAL if you are serving, _REMOTE otherwise
-    }
-    
-    void on_channel_data(telnet_channel* channel,
-                         telnet_channel_event type,
-                         const telnet_byte* data,
-                         size_t length)
-    {
-      // `type` is TELNET_CHANNEL_EV_BEGIN, _END, or _DATA
-      // _BEGIN and _END mark where the channel is switched to or from,
-      // effectively marking the boundaries of a message.
+      // telopt is the telopt this event was triggered for
       
-      // `data` and `length` are only valid when `type` is
-      // TELNET_CHANNEL_EV_DATA
+      switch (event->type)
+      {
+        case TELNET_EV_TELOPT_TOGGLE:
+          telnet_telopt_toggle_event* ev = (telnet_telopt_toggle_event*)event;
+          // ev->where is TELNET_TELOPT_LOCAL or TELNET_TELOPT_REMOTE,
+          //     corresponding to Telnet's WILL/WONT and DO/DONT commands.
+          // ev->status is TELNET_TELOPT_ON or TELNET_TELOPT_OFF.
+          break;
+        case TELNET_EV_TELOPT_FOCUS:
+          telnet_telopt_focus_event* ev = (telnet_telopt_focus_event*)event;
+          // ev->focus is 1 or 0 depending on if a subnegotiation packet has
+          //     begun or ended.
+          break;
+        case TELNET_EV_TELOPT_DATA:
+          telnet_telopt_data_event* ev = (telnet_telopt_data_event*)event;
+          // ev->data is a pointer to the received data.
+          // ev->length is the length of the data buffer.
+          break;
+      }
     }
     
     int main()
     {
       // Create an NVT
-      telnet_nvt* nvt = telnet_nvt_new(&on_event, NULL);
+      telnet_nvt* nvt = telnet_nvt_new(&on_event, &on_telopt_event, NULL);
       
-      // Create a channel
-      telnet_channel* channel = telnet_channel_new(&on_channel_toggle,
-                                           &on_channel_data,
-                                           NULL);
-      
-      // Register the channel
-      telnet_channel_register(channel,
-                              nvt,
-                              230, // which channel to bind to
-                                   // can be TELNET_MAIN_CHANNEL also
-                              TELNET_CHANNEL_ON, // we will serve
-                              TELNET_CHANNEL_OFF); // they don't serve
+      // Ask to enable a telopt locally (a WILL command)
+      telnet_request_enable_local(nvt, 230);
       
       // Process some incoming data
       const char* data = "\xFF\xFD\xE6" // IAC DO 230  (turn channel on)
-                         "\xFF\xFA\xE6" // IAC SB E6   (switch to channel)
+                         "\xFF\xFA\xE6" // IAC SB 230  (switch to channel)
                          "foo bar baz"                 (send data)
                          "\xFF\xF0";    // IAC SE      (switch to main)
-      telnet_recv(nvt, (const telnet_byte*)data, strlen(data), NULL);
+      telnet_receive(nvt, (const telnet_byte*)data, strlen(data), NULL);
       
       // Free the NVT
       telnet_nvt_free(nvt);
@@ -164,7 +149,7 @@ closed.
 ## Alternatives
 * [libtelnet][github-libtelnet], by Elanthis<br>
   It incorporates a number of (rather MUD-specific) protocols by default,
-  and/but lacks the channels paradigm.
+  though its API is quite different.
 
 [github-libtelnet]: https://github.com/elanthis/libtelnet (libtelnet on GitHub)
 

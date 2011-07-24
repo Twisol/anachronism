@@ -4,7 +4,7 @@
 #include <anachronism/parser.h>
 
 #define BASE_EV(ev, t) \
-  (ev).SUPER_.type = TELNET_EV_##t
+  (ev).SUPER_.type = TELNET_EV_PARSER_##t
 
 #define EV_DATA(ev, text, len) do {\
   BASE_EV(ev, DATA);\
@@ -136,18 +136,18 @@ tr1:
 	{
     if (parser->callback && buf != NULL)
     {
-      telnet_warning_event ev;
+      telnet_parser_warning_event ev;
       EV_WARNING(ev, "Invalid \\r: not followed by \\n or \\0.", ( parser->p)-data);
-      parser->callback(parser, (telnet_event*)&ev);
+      parser->callback(parser, (telnet_parser_event*)&ev);
     }
   }
 #line 57 "src/parser.rl"
 	{
     if (parser->callback && buflen > 0)
     {
-      telnet_data_event ev;
+      telnet_parser_data_event ev;
       EV_DATA(ev, buf, buflen);
-      parser->callback(parser, (telnet_event*)&ev);
+      parser->callback(parser, (telnet_parser_event*)&ev);
       buflen = 0;
     }
   }
@@ -164,9 +164,9 @@ tr3:
 	{
     if (parser->callback && buflen > 0)
     {
-      telnet_data_event ev;
+      telnet_parser_data_event ev;
       EV_DATA(ev, buf, buflen);
-      parser->callback(parser, (telnet_event*)&ev);
+      parser->callback(parser, (telnet_parser_event*)&ev);
       buflen = 0;
     }
   }
@@ -174,9 +174,9 @@ tr3:
 	{
     if (parser->callback && buf)
     {
-      telnet_command_event ev;
+      telnet_parser_command_event ev;
       EV_COMMAND(ev, (*( parser->p)));
-      parser->callback(parser, (telnet_event*)&ev);
+      parser->callback(parser, (telnet_parser_event*)&ev);
     }
   }
 	goto st7;
@@ -185,9 +185,9 @@ tr12:
 	{
     if (parser->callback && buflen > 0)
     {
-      telnet_data_event ev;
+      telnet_parser_data_event ev;
       EV_DATA(ev, buf, buflen);
-      parser->callback(parser, (telnet_event*)&ev);
+      parser->callback(parser, (telnet_parser_event*)&ev);
       buflen = 0;
     }
   }
@@ -197,18 +197,18 @@ tr12:
 	{
     if (parser->callback && buf != NULL)
     {
-      telnet_warning_event ev;
+      telnet_parser_warning_event ev;
       EV_WARNING(ev, "IAC followed by invalid command.", ( parser->p)-data);
-      parser->callback(parser, (telnet_event*)&ev);
+      parser->callback(parser, (telnet_parser_event*)&ev);
     }
   }
 #line 102 "src/parser.rl"
 	{
     if (parser->callback && buf != NULL)
     {
-      telnet_subnegotiation_event ev;
+      telnet_parser_subnegotiation_event ev;
       EV_SUBNEGOTIATION(ev, 0, parser->option_mark);
-      parser->callback(parser, (telnet_event*)&ev);
+      parser->callback(parser, (telnet_parser_event*)&ev);
     }
   }
 	goto st7;
@@ -217,9 +217,9 @@ tr13:
 	{
     if (parser->callback && buflen > 0)
     {
-      telnet_data_event ev;
+      telnet_parser_data_event ev;
       EV_DATA(ev, buf, buflen);
-      parser->callback(parser, (telnet_event*)&ev);
+      parser->callback(parser, (telnet_parser_event*)&ev);
       buflen = 0;
     }
   }
@@ -227,9 +227,9 @@ tr13:
 	{
     if (parser->callback && buf != NULL)
     {
-      telnet_subnegotiation_event ev;
+      telnet_parser_subnegotiation_event ev;
       EV_SUBNEGOTIATION(ev, 0, parser->option_mark);
-      parser->callback(parser, (telnet_event*)&ev);
+      parser->callback(parser, (telnet_parser_event*)&ev);
     }
   }
 	goto st7;
@@ -238,9 +238,9 @@ tr14:
 	{
     if (parser->callback && buf)
     {
-      telnet_option_event ev;
+      telnet_parser_option_event ev;
       EV_OPTION(ev, parser->option_mark, (*( parser->p)));
-      parser->callback(parser, (telnet_event*)&ev);
+      parser->callback(parser, (telnet_parser_event*)&ev);
     }
   }
 	goto st7;
@@ -287,9 +287,9 @@ tr4:
 	{
     if (parser->callback && buflen > 0)
     {
-      telnet_data_event ev;
+      telnet_parser_data_event ev;
       EV_DATA(ev, buf, buflen);
-      parser->callback(parser, (telnet_event*)&ev);
+      parser->callback(parser, (telnet_parser_event*)&ev);
       buflen = 0;
     }
   }
@@ -307,18 +307,18 @@ tr11:
 	{
     if (parser->callback && buf != NULL)
     {
-      telnet_warning_event ev;
+      telnet_parser_warning_event ev;
       EV_WARNING(ev, "Invalid \\r: not followed by \\n or \\0.", ( parser->p)-data);
-      parser->callback(parser, (telnet_event*)&ev);
+      parser->callback(parser, (telnet_parser_event*)&ev);
     }
   }
 #line 57 "src/parser.rl"
 	{
     if (parser->callback && buflen > 0)
     {
-      telnet_data_event ev;
+      telnet_parser_data_event ev;
       EV_DATA(ev, buf, buflen);
-      parser->callback(parser, (telnet_event*)&ev);
+      parser->callback(parser, (telnet_parser_event*)&ev);
       buflen = 0;
     }
   }
@@ -336,9 +336,9 @@ tr6:
     parser->option_mark = (*( parser->p));
     if (parser->callback && buf != NULL)
     {
-      telnet_subnegotiation_event ev;
+      telnet_parser_subnegotiation_event ev;
       EV_SUBNEGOTIATION(ev, 1, parser->option_mark);
-      parser->callback(parser, (telnet_event*)&ev);
+      parser->callback(parser, (telnet_parser_event*)&ev);
     }
   }
 	goto st3;
@@ -383,9 +383,9 @@ tr5:
 	{
     if (parser->callback && buflen > 0)
     {
-      telnet_data_event ev;
+      telnet_parser_data_event ev;
       EV_DATA(ev, buf, buflen);
-      parser->callback(parser, (telnet_event*)&ev);
+      parser->callback(parser, (telnet_parser_event*)&ev);
       buflen = 0;
     }
   }
@@ -419,9 +419,9 @@ case 6:
 	{
     if (parser->callback && buflen > 0)
     {
-      telnet_data_event ev;
+      telnet_parser_data_event ev;
       EV_DATA(ev, buf, buflen);
-      parser->callback(parser, (telnet_event*)&ev);
+      parser->callback(parser, (telnet_parser_event*)&ev);
       buflen = 0;
     }
   }
