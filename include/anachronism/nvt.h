@@ -30,15 +30,15 @@ enum
 
 typedef enum telnet_telopt_mode
 {
-  TELNET_CHANNEL_OFF,
-  TELNET_CHANNEL_ON,
-  TELNET_CHANNEL_LAZY,
+  TELNET_OFF,
+  TELNET_ON,
+  TELNET_LAZY,
 } telnet_telopt_mode;
 
 typedef enum telnet_telopt_location
 {
-  TELNET_CHANNEL_LOCAL,
-  TELNET_CHANNEL_REMOTE,
+  TELNET_LOCAL,
+  TELNET_REMOTE,
 } telnet_telopt_location;
 
 

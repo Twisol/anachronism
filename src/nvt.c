@@ -103,18 +103,18 @@ static void process_option_event(telnet_nvt* nvt,
         case Q_WANTNOYES:
           // error
           q->r_current = Q_YES;
-          TELOPT_TOGGLE_CALLBACK(nvt, telopt, TELNET_CHANNEL_REMOTE, TELNET_CHANNEL_ON);
+          TELOPT_TOGGLE_CALLBACK(nvt, telopt, TELNET_REMOTE, TELNET_ON);
           break;
         case Q_WANTYES:
           if (q->r_lazy)
             send_option(nvt, IAC_DO, telopt);
           q->r_current = Q_YES;
-          TELOPT_TOGGLE_CALLBACK(nvt, telopt, TELNET_CHANNEL_REMOTE, TELNET_CHANNEL_ON);
+          TELOPT_TOGGLE_CALLBACK(nvt, telopt, TELNET_REMOTE, TELNET_ON);
           break;
         case Q_WANTYESNO:
           send_option(nvt, IAC_DONT, telopt);
           q->r_current = Q_WANTNO;
-          TELOPT_TOGGLE_CALLBACK(nvt, telopt, TELNET_CHANNEL_REMOTE, TELNET_CHANNEL_ON);
+          TELOPT_TOGGLE_CALLBACK(nvt, telopt, TELNET_REMOTE, TELNET_ON);
           break;
       }
       break;
@@ -124,7 +124,7 @@ static void process_option_event(telnet_nvt* nvt,
         case Q_YES:
           send_option(nvt, IAC_DONT, telopt);
           q->r_current = Q_NO;
-          TELOPT_TOGGLE_CALLBACK(nvt, telopt, TELNET_CHANNEL_REMOTE, TELNET_CHANNEL_OFF);
+          TELOPT_TOGGLE_CALLBACK(nvt, telopt, TELNET_REMOTE, TELNET_OFF);
           break;
         case Q_WANTNO:
           q->r_current = Q_NO;
@@ -155,18 +155,18 @@ static void process_option_event(telnet_nvt* nvt,
         case Q_WANTNOYES:
           // error
           q->l_current = Q_YES;
-          TELOPT_TOGGLE_CALLBACK(nvt, telopt, TELNET_CHANNEL_LOCAL, TELNET_CHANNEL_ON);
+          TELOPT_TOGGLE_CALLBACK(nvt, telopt, TELNET_LOCAL, TELNET_ON);
           break;
         case Q_WANTYES:
           if (q->l_lazy)
             send_option(nvt, IAC_WILL, telopt);
           q->l_current = Q_YES;
-          TELOPT_TOGGLE_CALLBACK(nvt, telopt, TELNET_CHANNEL_LOCAL, TELNET_CHANNEL_ON);
+          TELOPT_TOGGLE_CALLBACK(nvt, telopt, TELNET_LOCAL, TELNET_ON);
           break;
         case Q_WANTYESNO:
           q->l_current = Q_WANTNO;
           send_option(nvt, IAC_WONT, telopt);
-          TELOPT_TOGGLE_CALLBACK(nvt, telopt, TELNET_CHANNEL_LOCAL, TELNET_CHANNEL_ON);
+          TELOPT_TOGGLE_CALLBACK(nvt, telopt, TELNET_LOCAL, TELNET_ON);
           break;
       }
       break;
@@ -176,7 +176,7 @@ static void process_option_event(telnet_nvt* nvt,
         case Q_YES:
           send_option(nvt, IAC_DONT, telopt);
           q->l_current = Q_NO;
-          TELOPT_TOGGLE_CALLBACK(nvt, telopt, TELNET_CHANNEL_LOCAL, TELNET_CHANNEL_OFF);
+          TELOPT_TOGGLE_CALLBACK(nvt, telopt, TELNET_LOCAL, TELNET_OFF);
           break;
         case Q_WANTNO:
           q->l_current = Q_NO;
@@ -212,12 +212,24 @@ static void process_data_event(telnet_nvt* nvt,
     }
   } else {
     // Telopt data
+    telnet_byte telopt = (telnet_byte)nvt->current_remote;
+    
     if (nvt->telopt_callback) {
+      // Make sure the telopt is enabled
+      telnet_telopt_mode status;
+      telnet_telopt_status_local(nvt, telopt, &status);
+      if (status != TELNET_ON) {
+        telnet_telopt_status_remote(nvt, telopt, &status);
+        if (status != TELNET_ON) {
+          return;
+        }
+      }
+      
       telnet_telopt_data_event ev;
       ev.SUPER_.type = TELNET_EV_TELOPT_DATA;
       ev.data = data;
       ev.length = length;
-      nvt->telopt_callback(nvt, (telnet_byte)nvt->current_remote, (telnet_telopt_event*)&ev);
+      nvt->telopt_callback(nvt, telopt, (telnet_telopt_event*)&ev);
     }
   }
 }
@@ -233,6 +245,16 @@ static void process_subnegotiation_event(telnet_nvt* nvt,
   }
   
   if (nvt->telopt_callback) {
+    // Make sure the telopt is enabled
+    telnet_telopt_mode status;
+    telnet_telopt_status_local(nvt, telopt, &status);
+    if (status != TELNET_ON) {
+      telnet_telopt_status_remote(nvt, telopt, &status);
+      if (status != TELNET_ON) {
+        return;
+      }
+    }
+    
     telnet_telopt_focus_event ev;
     ev.SUPER_.type = TELNET_EV_TELOPT_FOCUS;
     ev.focus = open;
@@ -571,7 +593,7 @@ telnet_error telnet_telopt_disable_local(telnet_nvt* nvt, telnet_byte telopt)
   {
     case Q_YES:
       send_option(nvt, IAC_WONT, telopt);
-      TELOPT_TOGGLE_CALLBACK(nvt, telopt, TELNET_CHANNEL_LOCAL, TELNET_CHANNEL_OFF);
+      TELOPT_TOGGLE_CALLBACK(nvt, telopt, TELNET_LOCAL, TELNET_OFF);
       q->l_current = Q_WANTNO;
       break;
     case Q_WANTNOYES:
@@ -596,7 +618,7 @@ telnet_error telnet_telopt_disable_remote(telnet_nvt* nvt, telnet_byte telopt)
   {
     case Q_YES:
       send_option(nvt, IAC_DONT, telopt);
-      TELOPT_TOGGLE_CALLBACK(nvt, telopt, TELNET_CHANNEL_REMOTE, TELNET_CHANNEL_OFF);
+      TELOPT_TOGGLE_CALLBACK(nvt, telopt, TELNET_REMOTE, TELNET_OFF);
       q->r_current = Q_WANTNO;
       break;
     case Q_WANTNOYES:
@@ -615,9 +637,9 @@ telnet_error telnet_telopt_disable_remote(telnet_nvt* nvt, telnet_byte telopt)
 static telnet_telopt_mode telopt_status(unsigned int qval) {
   switch (qval) {
     case Q_YES: case Q_WANTNO: case Q_WANTNOYES:
-      return TELNET_CHANNEL_ON;
+      return TELNET_ON;
     default:
-      return TELNET_CHANNEL_OFF;
+      return TELNET_OFF;
   }
 }
 
