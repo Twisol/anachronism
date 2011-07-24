@@ -194,7 +194,7 @@ telnet_error telnet_send_data(telnet_nvt* nvt, const telnet_byte* data, const si
   
   Errors:
     TELNET_E_BAD_NVT        - Invalid telnet_nvt* parameter.
-    TELNET_E_BAD_COMMAND    - The command cannot be WILL, WONT, DO, DONT, SB, or SE.
+    TELNET_E_INVALID_COMMAND    - The command cannot be WILL, WONT, DO, DONT, SB, or SE.
  */
 telnet_error telnet_send_command(telnet_nvt* nvt, const telnet_byte command);
 
