@@ -593,8 +593,8 @@ telnet_error telnet_telopt_disable_local(telnet_nvt* nvt, telnet_byte telopt)
   {
     case Q_YES:
       send_option(nvt, IAC_WONT, telopt);
-      TELOPT_TOGGLE_CALLBACK(nvt, telopt, TELNET_LOCAL, TELNET_OFF);
       q->l_current = Q_WANTNO;
+      TELOPT_TOGGLE_CALLBACK(nvt, telopt, TELNET_LOCAL, TELNET_OFF);
       break;
     case Q_WANTNOYES:
       q->l_current = Q_WANTNO;
@@ -618,8 +618,8 @@ telnet_error telnet_telopt_disable_remote(telnet_nvt* nvt, telnet_byte telopt)
   {
     case Q_YES:
       send_option(nvt, IAC_DONT, telopt);
-      TELOPT_TOGGLE_CALLBACK(nvt, telopt, TELNET_REMOTE, TELNET_OFF);
       q->r_current = Q_WANTNO;
+      TELOPT_TOGGLE_CALLBACK(nvt, telopt, TELNET_REMOTE, TELNET_OFF);
       break;
     case Q_WANTNOYES:
       q->r_current = Q_WANTNO;
