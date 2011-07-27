@@ -532,23 +532,27 @@ telnet_error telnet_telopt_enable_local(telnet_nvt* nvt,
   switch (q->l_current)
   {
     case Q_NO:
+      q->l_current = Q_WANTYES;
       if (!lazy)
         send_option(nvt, IAC_WILL, telopt);
-      q->l_current = Q_WANTYES;
       break;
     case Q_WANTNO:
       q->l_current = Q_WANTNOYES;
       break;
     case Q_WANTYES:
-      if (q->l_lazy && !lazy)
+    {
+      unsigned char storedLazy = q->l_lazy;
+      q->l_lazy = (lazy != 0);
+      
+      if (storedLazy && !lazy)
         send_option(nvt, IAC_WILL, telopt);
       break;
+    }
     case Q_WANTYESNO:
       q->l_current = Q_WANTYES;
       break;
   }
   
-  q->l_lazy = (lazy != 0);
   return TELNET_E_OK;
 }
 
@@ -563,23 +567,27 @@ telnet_error telnet_telopt_enable_remote(telnet_nvt* nvt,
   switch (q->r_current)
   {
     case Q_NO:
+      q->r_current = Q_WANTYES;
       if (!lazy)
         send_option(nvt, IAC_DO, telopt);
-      q->r_current = Q_WANTYES;
       break;
     case Q_WANTNO:
       q->r_current = Q_WANTNOYES;
       break;
     case Q_WANTYES:
-      if (q->r_lazy && !lazy)
+    {
+      unsigned char storedLazy = q->r_lazy;
+      q->r_lazy = (lazy != 0);
+      
+      if (storedLazy && !lazy)
         send_option(nvt, IAC_DO, telopt);
       break;
+    }
     case Q_WANTYESNO:
       q->r_current = Q_WANTYES;
       break;
   }
   
-  q->r_lazy = (lazy != 0);
   return TELNET_E_OK;
 }
 
@@ -594,6 +602,7 @@ telnet_error telnet_telopt_disable_local(telnet_nvt* nvt, telnet_byte telopt)
     case Q_YES:
       send_option(nvt, IAC_WONT, telopt);
       q->l_current = Q_WANTNO;
+      q->l_lazy = 0;
       TELOPT_TOGGLE_CALLBACK(nvt, telopt, TELNET_LOCAL, TELNET_OFF);
       break;
     case Q_WANTNOYES:
@@ -601,10 +610,10 @@ telnet_error telnet_telopt_disable_local(telnet_nvt* nvt, telnet_byte telopt)
       break;
     case Q_WANTYES:
       q->l_current = (q->l_lazy) ? Q_NO : Q_WANTYESNO;
+      q->l_lazy = 0;
       break;
   }
   
-  q->l_lazy = 0;
   return TELNET_E_OK;
 }
 
@@ -619,6 +628,7 @@ telnet_error telnet_telopt_disable_remote(telnet_nvt* nvt, telnet_byte telopt)
     case Q_YES:
       send_option(nvt, IAC_DONT, telopt);
       q->r_current = Q_WANTNO;
+      q->r_lazy = 0;
       TELOPT_TOGGLE_CALLBACK(nvt, telopt, TELNET_REMOTE, TELNET_OFF);
       break;
     case Q_WANTNOYES:
@@ -626,10 +636,10 @@ telnet_error telnet_telopt_disable_remote(telnet_nvt* nvt, telnet_byte telopt)
       break;
     case Q_WANTYES:
       q->r_current = (q->r_lazy) ? Q_NO : Q_WANTYESNO;
+      q->r_lazy = 0;
       break;
   }
   
-  q->r_lazy = 0;
   return TELNET_E_OK;
 }
 
