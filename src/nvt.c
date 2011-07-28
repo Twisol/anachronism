@@ -533,6 +533,7 @@ telnet_error telnet_telopt_enable_local(telnet_nvt* nvt,
   {
     case Q_NO:
       q->l_current = Q_WANTYES;
+      q->l_lazy = (lazy != 0);
       if (!lazy)
         send_option(nvt, IAC_WILL, telopt);
       break;
@@ -568,6 +569,7 @@ telnet_error telnet_telopt_enable_remote(telnet_nvt* nvt,
   {
     case Q_NO:
       q->r_current = Q_WANTYES;
+      q->r_lazy = (lazy != 0);
       if (!lazy)
         send_option(nvt, IAC_DO, telopt);
       break;
