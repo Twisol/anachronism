@@ -123,7 +123,7 @@ typedef struct telnet_nvt telnet_nvt;
 
 typedef void (*telnet_nvt_event_callback)(telnet_nvt* nvt, telnet_event* event);
 typedef void (*telnet_telopt_event_callback)(telnet_nvt* nvt, telnet_byte telopt, telnet_telopt_event* event);
-typedef int (*telnet_negotiate_event_callback)(telnet_nvt* nvt, telnet_byte telopt, telnet_telopt_location where);
+typedef unsigned char (*telnet_negotiate_event_callback)(telnet_nvt* nvt, telnet_byte telopt, telnet_telopt_location where);
 
 /**
   Creates a new Telnet NVT.
