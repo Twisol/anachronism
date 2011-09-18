@@ -32,10 +32,10 @@ The anachronism/nvt.h header can be consulted for more complete documentation.
 ### Basic usage
 The core type exposed by Anachronism is the telnet\_nvt, which represents the
 Telnet RFC's "Network Virtual Terminal". An NVT is created using
-telnet\_nvt\_new(). When creating an NVT, you must provide it with a pair of
-callbacks to send events to, and an optional void\* to store as the
-event handler's context. You can use telnet\_recv() to process incoming data,
-and the telnet\_send\_\*() set of functions to emit outgoing data.
+telnet\_nvt\_new(). When creating an NVT, you must provide it with a set of
+callbacks to send events to, and an optional void\* to store as the event
+handler's context. You can use telnet\_recv() to process incoming data, and
+the telnet\_send\_\*() set of functions to emit outgoing data.
 
     #include <stdio.h>
     #include <anachronism/nvt.h>
@@ -65,7 +65,7 @@ and the telnet\_send\_\*() set of functions to emit outgoing data.
     int main()
     {
       // Create an NVT
-      telnet_nvt* nvt = telnet_nvt_new(&on_event, NULL, NULL);
+      telnet_nvt* nvt = telnet_nvt_new(NULL, &on_event, NULL, NULL);
       
       // Process some incoming data
       const char* data = "foo bar baz";
@@ -126,10 +126,10 @@ utilized, events are sent to the telopt callback provided to telnet_nvt_new().
     int main()
     {
       // Create an NVT
-      telnet_nvt* nvt = telnet_nvt_new(&on_event, &on_telopt_event, NULL);
+      telnet_nvt* nvt = telnet_nvt_new(NULL, &on_event, &on_telopt_event, NULL);
       
       // Ask to enable a telopt locally (a WILL command)
-      telnet_request_enable_local(nvt, 230);
+      telnet_request_enable(nvt, 230, TELNET_LOCAL);
       
       // Process some incoming data
       const char* data = "\xFF\xFD\xE6" // IAC DO 230  (turn channel on)
