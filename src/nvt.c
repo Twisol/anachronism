@@ -89,6 +89,7 @@ static unsigned char telopt_status(telnet_nvt* nvt,
       return 0;
   }
 }
+#define telopt_subnegotiable(nvt, telopt) (telopt_status((nvt), (telopt), TELNET_REMOTE) || telopt_status((nvt), (telopt), TELNET_LOCAL))
 
 
 static void send_option(telnet_nvt* nvt, telnet_byte command, telnet_byte telopt)
@@ -236,8 +237,7 @@ static void process_data_event(telnet_nvt* nvt,
     
     if (nvt->telopt_callback) {
       // Make sure the telopt is enabled
-      if (telopt_status(nvt, telopt, TELNET_LOCAL) ||
-          telopt_status(nvt, telopt, TELNET_REMOTE)) {
+      if (telopt_subnegotiable(nvt, telopt)) {
         telnet_telopt_data_event ev;
         ev.SUPER_.type = TELNET_EV_TELOPT_DATA;
         ev.data = data;
@@ -260,8 +260,7 @@ static void process_subnegotiation_event(telnet_nvt* nvt,
   
   if (nvt->telopt_callback) {
     // Make sure the telopt is enabled
-    if (telopt_status(nvt, telopt, TELNET_LOCAL) ||
-        telopt_status(nvt, telopt, TELNET_REMOTE)) {
+    if (telopt_subnegotiable(nvt, telopt)) {
       telnet_telopt_focus_event ev;
       ev.SUPER_.type = TELNET_EV_TELOPT_FOCUS;
       ev.focus = open;
@@ -500,6 +499,8 @@ telnet_error telnet_send_subnegotiation(telnet_nvt* nvt, const telnet_byte optio
 {
   if (!nvt)
     return TELNET_E_BAD_NVT;
+  else if (!telopt_subnegotiable(nvt, option))
+    return TELNET_E_NOT_SUBNEGOTIABLE;
   else if (!nvt->callback)
     return TELNET_E_OK;
   
