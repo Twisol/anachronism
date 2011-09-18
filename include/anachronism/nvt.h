@@ -28,13 +28,6 @@ enum
   IAC_IAC,
 };
 
-typedef enum telnet_telopt_mode
-{
-  TELNET_OFF,
-  TELNET_ON,
-  TELNET_LAZY,
-} telnet_telopt_mode;
-
 typedef enum telnet_telopt_location
 {
   TELNET_LOCAL,
@@ -107,7 +100,7 @@ typedef struct telnet_telopt_toggle_event
 {
   telnet_telopt_event SUPER_;
   telnet_telopt_location where;
-  telnet_telopt_mode status;
+  unsigned char status;
 } telnet_telopt_toggle_event;
 
 typedef struct telnet_telopt_focus_event
@@ -130,6 +123,7 @@ typedef struct telnet_nvt telnet_nvt;
 
 typedef void (*telnet_nvt_event_callback)(telnet_nvt* nvt, telnet_event* event);
 typedef void (*telnet_telopt_event_callback)(telnet_nvt* nvt, telnet_byte telopt, telnet_telopt_event* event);
+typedef int (*telnet_negotiate_event_callback)(telnet_nvt* nvt, telnet_byte telopt, telnet_telopt_location where);
 
 /**
   Creates a new Telnet NVT.
@@ -137,9 +131,10 @@ typedef void (*telnet_telopt_event_callback)(telnet_nvt* nvt, telnet_byte telopt
   Errors:
     TELNET_E_ALLOC - Unable to allocate enough memory for the NVT.
  */
-telnet_nvt* telnet_nvt_new(telnet_nvt_event_callback nvt_callback,
+telnet_nvt* telnet_nvt_new(void* userdata,
+                           telnet_nvt_event_callback nvt_callback,
                            telnet_telopt_event_callback telopt_callback,
-                           void* userdata);
+                           telnet_negotiate_event_callback negotiate_callback);
 
 void telnet_nvt_free(telnet_nvt* nvt);
 
@@ -208,12 +203,9 @@ telnet_error telnet_send_command(telnet_nvt* nvt, const telnet_byte command);
 telnet_error telnet_send_subnegotiation(telnet_nvt* nvt, const telnet_byte option, const telnet_byte* data, const size_t length);
 
 
-telnet_error telnet_telopt_enable_local(telnet_nvt* nvt, const telnet_byte telopt, unsigned char lazy);
-telnet_error telnet_telopt_enable_remote(telnet_nvt* nvt, const telnet_byte telopt, unsigned char lazy);
-telnet_error telnet_telopt_disable_local(telnet_nvt* nvt, const telnet_byte telopt);
-telnet_error telnet_telopt_disable_remote(telnet_nvt* nvt, const telnet_byte telopt);
-telnet_error telnet_telopt_status_local(telnet_nvt* nvt, const telnet_byte telopt, telnet_telopt_mode* status);
-telnet_error telnet_telopt_status_remote(telnet_nvt* nvt, const telnet_byte telopt, telnet_telopt_mode* status);
+telnet_error telnet_telopt_enable(telnet_nvt* nvt, const telnet_byte telopt, telnet_telopt_location where);
+telnet_error telnet_telopt_disable(telnet_nvt* nvt, const telnet_byte telopt, telnet_telopt_location where);
+telnet_error telnet_telopt_status(telnet_nvt* nvt, const telnet_byte telopt, telnet_telopt_location where,  unsigned char* status);
 
 #ifdef __cplusplus
 }

@@ -60,8 +60,8 @@ static const int telnet_parser_en_main = 7;
 #line 130 "src/parser.rl"
 
 
-telnet_parser* telnet_parser_new(telnet_parser_callback callback,
-                                 void* userdata)
+telnet_parser* telnet_parser_new(void* userdata,
+                                 telnet_parser_callback callback)
 {
   telnet_parser* parser = malloc(sizeof(telnet_parser));
   if (parser)

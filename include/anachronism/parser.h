@@ -58,7 +58,7 @@ typedef struct telnet_parser telnet_parser;
 typedef void (*telnet_parser_callback)(telnet_parser* parser, telnet_parser_event* event);
 
 
-telnet_parser* telnet_parser_new(telnet_parser_callback callback, void* userdata);
+telnet_parser* telnet_parser_new(void* userdata, telnet_parser_callback callback);
 void telnet_parser_free(telnet_parser* parser);
 
 telnet_error telnet_parser_get_userdata(telnet_parser* parser, void** userdata);

@@ -129,8 +129,8 @@ struct telnet_parser {
   write data;
 }%%
 
-telnet_parser* telnet_parser_new(telnet_parser_callback callback,
-                                 void* userdata)
+telnet_parser* telnet_parser_new(void* userdata,
+                                 telnet_parser_callback callback)
 {
   telnet_parser* parser = malloc(sizeof(telnet_parser));
   if (parser)
