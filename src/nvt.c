@@ -114,6 +114,7 @@ static void process_option_event(telnet_nvt* nvt,
           if (nvt->negotiate_callback && nvt->negotiate_callback(nvt, telopt, TELNET_REMOTE)) {
             send_option(nvt, IAC_DO, telopt);
             q->remote = Q_YES;
+            TELOPT_TOGGLE_CALLBACK(nvt, telopt, TELNET_REMOTE, 1);
           } else {
             send_option(nvt, IAC_DONT, telopt);
           }
@@ -168,6 +169,7 @@ static void process_option_event(telnet_nvt* nvt,
           if (nvt->negotiate_callback && nvt->negotiate_callback(nvt, telopt, TELNET_LOCAL)) {
             send_option(nvt, IAC_WILL, telopt);
             q->local = Q_YES;
+            TELOPT_TOGGLE_CALLBACK(nvt, telopt, TELNET_REMOTE, 1);
           } else {
             send_option(nvt, IAC_WONT, telopt);
           }
