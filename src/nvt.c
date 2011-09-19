@@ -560,6 +560,7 @@ telnet_error telnet_telopt_enable(telnet_nvt* nvt,
     switch (q->remote)
     {
       case Q_NO:
+        q->remote = Q_WANTYES;
         send_option(nvt, IAC_DO, telopt);
         break;
       case Q_WANTNO:
