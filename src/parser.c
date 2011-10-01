@@ -414,6 +414,7 @@ case 6:
 	if ( ( parser->p) == ( parser->eof) )
 	{
 	switch (  parser->cs ) {
+	case 3: 
 	case 7: 
 #line 57 "src/parser.rl"
 	{
@@ -426,7 +427,7 @@ case 6:
     }
   }
 	break;
-#line 430 "src/parser.c"
+#line 431 "src/parser.c"
 	}
 	}
 

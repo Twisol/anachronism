@@ -59,7 +59,7 @@
                ( plain_text
                | cr_seq
                | IAC IAC @char
-               )**
+               )** %/flush_text
                IAC
                ( SE
                | ^(IAC|SE) @fhold @warning_iac
@@ -79,7 +79,7 @@
                     ( IAC @char
                     | iac_seq >flush_text
                     )
-                  )** %flush_text;
+                  )** %/flush_text;
   
   main := telnet_stream;
 }%%
